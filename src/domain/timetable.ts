@@ -104,3 +104,29 @@ export function axisY(axis: AxisSegment[], minute: number, rowPx: number, gapPx:
 
 export const axisHeight = (axis: AxisSegment[], rowPx: number, gapPx: number) =>
   axis.reduce((h, seg) => h + (seg.kind === 'gap' ? gapPx : ((seg.to - seg.from) / 15) * rowPx), 0)
+
+const NOON = 12 * 60
+
+export const isMorning = (minute: number) => minute < NOON
+
+export interface SessionBand {
+  session: 'AM' | 'PM'
+  from: number
+  to: number
+}
+
+/** Khoảng sáng và chiều trên trục giờ, tách ở 12:00. Một ca vắt qua trưa vẫn được chia đúng theo từng ô giờ. */
+export function sessionBands(axis: AxisSegment[]): SessionBand[] {
+  const bands: SessionBand[] = []
+  const add = (session: SessionBand['session'], from: number, to: number) => {
+    const last = bands.at(-1)
+    if (last?.session === session) last.to = to
+    else bands.push({ session, from, to })
+  }
+  for (const seg of axis) {
+    if (seg.kind === 'gap') continue
+    if (seg.from < NOON) add('AM', seg.from, Math.min(seg.to, NOON))
+    if (seg.to > NOON) add('PM', Math.max(seg.from, NOON), seg.to)
+  }
+  return bands
+}

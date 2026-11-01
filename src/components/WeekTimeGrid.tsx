@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { CalendarClock, Plus } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ISSUE_META, type Issue } from '../domain/issues'
-import { axisHeight, axisY, buildAxis, layoutDay, MIN_VISUAL_MIN } from '../domain/timetable'
+import { axisHeight, axisY, buildAxis, isMorning, layoutDay, MIN_VISUAL_MIN, sessionBands } from '../domain/timetable'
 import { DAY_LABELS, dayIndex, dayLabel, shortDate, weekDates } from '../domain/time'
 import type { Lesson } from '../domain/types'
 import type { Ctx } from '../hooks'
@@ -14,9 +14,18 @@ const ROW_PX = 29 // Một ô 15 phút: ca 35 phút cao khoảng 67px, đủ 4 d
 const GAP_PX = 24
 const LANE_MIN_PX = 142
 const EMPTY_DAY_PX = 70
-const TIME_COL_PX = 52
+const TIME_COL_PX = 68
+const SESSION_STRIP_PX = 16
+
+// Nền theo buổi: tránh các màu đã dùng cho môn học (vàng, xanh ngọc, tím) và trạng thái (đỏ, xám).
+const slotColor = (min: number) => {
+  const odd = (min / 15) % 2 === 1
+  return isMorning(min) ? (odd ? '#dff0fb' : '#eef7fd') : (odd ? '#fde9d3' : '#fef4e8')
+}
 
 const LEGEND: { swatch: string; label: string }[] = [
+  { swatch: 'bg-[#dff0fb] border-sky-300', label: 'Buổi sáng' },
+  { swatch: 'bg-[#fde9d3] border-orange-300', label: 'Buổi chiều' },
   { swatch: 'bg-amber-50 border-amber-200', label: 'STEM' },
   { swatch: 'bg-teal-50 border-teal-200', label: 'Công dân số / AI' },
   { swatch: 'bg-violet-50 border-violet-200', label: 'Kỹ năng sống' },
@@ -68,6 +77,7 @@ export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap }: { 
   }, [issues])
   const countOn = (d: string) => lessons.filter((l) => l.date === d).length
   const height = axisHeight(axis, ROW_PX, GAP_PX)
+  const bands = useMemo(() => sessionBands(axis), [axis])
   const hasUntimed = days.some((d) => d.untimed.length > 0)
   const columns = `${TIME_COL_PX}px ${days.map((d) => (d.lanes ? `minmax(${d.lanes * LANE_MIN_PX}px, ${d.lanes}fr)` : `minmax(${EMPTY_DAY_PX}px, 0.6fr)`)).join(' ')}`
   const overflowing = view === 'week' && !weekFits
@@ -115,11 +125,19 @@ export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap }: { 
             ))}
           </>}
           <div className="sticky left-0 z-10 border-r border-slate-200 bg-white" style={{ height }}>
+            {bands.map((b) => {
+              const top = axisY(axis, b.from, ROW_PX, GAP_PX)
+              return (
+                <div key={b.session} data-testid={`session-band-${b.session}`} className={clsx('absolute left-0 z-10 flex items-center justify-center overflow-hidden text-[10px] font-bold tracking-wider text-white', b.session === 'AM' ? 'bg-sky-700' : 'bg-orange-700')} style={{ top, width: SESSION_STRIP_PX, height: axisY(axis, b.to, ROW_PX, GAP_PX) - top }}>
+                  <span style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>{b.session === 'AM' ? 'SÁNG' : 'CHIỀU'}</span>
+                </div>
+              )
+            })}
             {axis.map((seg) => seg.kind === 'gap' ? (
               <div key={seg.from} className="tnum flex items-center justify-center bg-slate-200 text-[10px] text-slate-500" style={{ height: GAP_PX }} title={`${label(seg.from)}–${label(seg.to)}: không có ca`}>⋮</div>
             ) : Array.from({ length: (seg.to - seg.from) / 15 }, (_, i) => {
               const min = seg.from + i * 15
-              return <div key={min} className={clsx('tnum flex items-center justify-center text-[10px]', min % 60 === 0 ? 'font-bold text-slate-800' : 'text-slate-400')} style={{ height: ROW_PX, background: (min / 15) % 2 ? '#f4f6ec' : '#fff' }}>{label(min)}</div>
+              return <div key={min} className={clsx('tnum flex items-center justify-center text-[10px]', min % 60 === 0 ? 'font-bold text-slate-900' : 'text-slate-600')} style={{ height: ROW_PX, paddingLeft: SESSION_STRIP_PX, background: slotColor(min) }}>{label(min)}</div>
             }))}
           </div>
           {days.map((d) => (
@@ -129,7 +147,7 @@ export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap }: { 
                   <div key={seg.from} className="tnum flex items-center justify-center bg-slate-200 text-[10px] text-slate-500" style={{ height: GAP_PX }}>{label(seg.from)}–{label(seg.to)} không có ca</div>
                 ) : Array.from({ length: (seg.to - seg.from) / 15 }, (_, i) => {
                   const min = seg.from + i * 15
-                  return <div key={min} style={{ height: ROW_PX, background: (min / 15) % 2 ? '#f4f6ec' : '#fff' }} />
+                  return <div key={min} data-testid="grid-slot" data-minute={min} style={{ height: ROW_PX, background: slotColor(min) }} />
                 }))}
               </div>
               {d.placed.map((p) => {

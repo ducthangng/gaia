@@ -1,4 +1,3 @@
-import { writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import seedJson from '../data/seed.json'
 import { blockers, leaveCovers, preferenceViolations } from './constraints'
@@ -11,7 +10,7 @@ import { rankCandidates } from './recommend'
 import { applySchoolAddress, missingSchoolFields, missingTeacherFields, parseCoordinate } from './data-quality'
 import { applyProfile, dropHomeKm, dropHomeLegs, locateAddress, profileErrors, profileFrom } from './teacher-profile'
 import { deriveRoute } from './route'
-import { axisHeight, axisY, buildAxis, hourRange, layoutDay, prettyName } from './timetable'
+import { axisHeight, axisY, buildAxis, hourRange, isMorning, layoutDay, prettyName, sessionBands } from './timetable'
 import { applyBulk, applyDraft, draftErrors, draftFrom, inScope, newLesson, type BulkScope } from './lesson-edit'
 import { healthOf, issueScore, newIssues, schoolLoad, touchesSchool, weekIssues } from './issues'
 import { affectedByLeave, applyLeave, applyLessonLeave, revertLeave, revertLessonLeave } from './leave'
@@ -501,10 +500,6 @@ describe('đề xuất tối ưu trên dữ liệu thật', () => {
     expect(fix).toBeTruthy()
     expect(fix!.changes[0].teacherId).not.toBe(open.teacherId)
   })
-  it('thống kê', () => {
-    const moves = list.filter((x) => x.kind !== 'fix')
-    writeFileSync(process.env.OPT_OUT ?? '/dev/null', JSON.stringify({ ms, n: list.length, byKind: list.reduce<Record<string, number>>((a, s) => ({ ...a, [s.kind]: (a[s.kind] ?? 0) + 1 }), {}), scope: list.reduce<Record<string, number>>((a, s) => ({ ...a, [s.scope]: (a[s.scope] ?? 0) + 1 }), {}), saving: moves.reduce((a, s) => a + s.saving, 0), base: realCost(week.lessons), pref: moves.reduce((a, s) => a + s.prefGain, 0), referLoss: moves.reduce((a, s) => a + s.referLoss, 0), top: list.slice(0, 8).map((s) => [s.title, s.saving, s.prefGain, s.referLoss, s.estimatedKm, s.load]) }, null, 1))
-  })
 })
 
 describe('mức độ đầy đủ thông tin', () => {
@@ -583,5 +578,29 @@ describe('thêm trường', () => {
     const s = createSchool(draft(), seed.schools, [])
     expect(schoolLoad(week.lessons).has(s.id)).toBe(false)
     expect(newLesson('n', week.id, s.id, { date: '2026-11-02', start: '08:00', end: '08:35', className: '1A', subject: 'STEM', teacherId: '', note: '' }).schoolId).toBe(s.id)
+  })
+})
+
+describe('phân biệt sáng và chiều trên lịch', () => {
+  const am = { startMin: 7 * 60 + 15, endMin: 7 * 60 + 55 }
+  const pm = { startMin: 14 * 60, endMin: 14 * 60 + 35 }
+  it('12:00 đúng là mốc chuyển buổi', () => {
+    expect([isMorning(11 * 60 + 45), isMorning(12 * 60), isMorning(13 * 60)]).toEqual([true, false, false])
+  })
+  it('có cả hai buổi khi lịch có ca sáng và chiều, dù khoảng nghỉ trưa bị thu gọn', () => {
+    expect(sessionBands(buildAxis([am, pm])).map((b) => b.session)).toEqual(['AM', 'PM'])
+  })
+  it('chỉ có một buổi thì chỉ hiện buổi đó', () => {
+    expect(sessionBands(buildAxis([am])).map((b) => b.session)).toEqual(['AM'])
+    expect(sessionBands(buildAxis([pm])).map((b) => b.session)).toEqual(['PM'])
+  })
+  it('ca vắt qua trưa được chia đúng ở 12:00', () => {
+    const bands = sessionBands(buildAxis([{ startMin: 11 * 60 + 30, endMin: 12 * 60 + 30 }]))
+    expect(bands).toEqual([{ session: 'AM', from: 11 * 60 + 30, to: 12 * 60 }, { session: 'PM', from: 12 * 60, to: 12 * 60 + 30 }])
+  })
+  it('khoảng trống trong cùng buổi không tách thành hai dải', () => {
+    const bands = sessionBands(buildAxis([am, { startMin: 10 * 60, endMin: 10 * 60 + 35 }]))
+    expect(bands.map((b) => b.session)).toEqual(['AM'])
+    expect(bands[0].to).toBe(10 * 60 + 45)
   })
 })

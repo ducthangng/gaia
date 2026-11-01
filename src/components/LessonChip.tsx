@@ -27,7 +27,7 @@ function GridLessonBody({ lesson: l, teacher, uncovered, statusText }: { lesson:
   return (
     <>
       <div className="flex items-baseline justify-between gap-1">
-        <span className="tnum whitespace-nowrap text-[11px] text-slate-500">{l.start ?? `Tiết ${l.period}`}{l.end && `–${l.end}`}</span>
+        <span className="tnum whitespace-nowrap text-[11px] text-slate-500">{l.start ?? `${SESSION_LABEL[l.session]} · Tiết ${l.period}`}{l.end && `–${l.end}`}</span>
         {l.subject && <span className="text-[10px] font-medium text-slate-600">{l.subject}</span>}
       </div>
       <div className="flex items-baseline justify-between gap-1">

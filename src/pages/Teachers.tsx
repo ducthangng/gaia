@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { ArrowRight, CalendarOff, FileDown, Home, MapPin, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { NavLink, useParams, useSearchParams } from 'react-router-dom'
-import { openProfileDialog } from '../components/TeacherProfileDialog'
+import { openNewTeacherDialog, openProfileDialog } from '../components/TeacherProfileDialog'
 import { TeachersTable } from '../components/InfoTables'
 import { ViewSwitch } from '../components/InlineCell'
 import { openLeaveDialog } from '../components/LeaveDialog'
@@ -33,7 +33,7 @@ function TeachersDetail() {
   const count = (tid: string) => ctx.week.lessons.filter((l) => l.teacherId === tid && l.status === 'assigned').length
   return (
     <div className="mx-auto flex h-full max-w-[1500px] flex-col gap-2">
-    <ViewSwitch />
+    <div className="flex items-center justify-between gap-3"><ViewSwitch /><Button onClick={openNewTeacherDialog}><Plus size={14} />Thêm giáo viên</Button></div>
     <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)] gap-4">
       <Card className="flex min-h-0 flex-col overflow-hidden">
         <div className="border-b border-slate-100 p-2"><input aria-label="Tìm giáo viên" className="w-full" placeholder="Tìm giáo viên, khu vực…" value={q} onChange={(e) => setQ(e.target.value)} /></div>

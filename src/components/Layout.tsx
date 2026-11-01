@@ -7,6 +7,7 @@ import { ISSUE_META } from '../domain/issues'
 import { useWeekContext, useWeekIssues } from '../hooks'
 import { LeaveDialog, openLeaveDialog } from './LeaveDialog'
 import { LessonEditor } from './LessonEditor'
+import { NewSchoolDialog } from './NewSchoolDialog'
 import { TeacherProfileDialog } from './TeacherProfileDialog'
 import { Button, Toaster } from './ui'
 
@@ -78,6 +79,7 @@ export function Layout() {
       <LeaveDialog />
       <LessonEditor />
       <TeacherProfileDialog />
+      <NewSchoolDialog />
       <Toaster />
     </div>
   )

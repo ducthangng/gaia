@@ -83,6 +83,8 @@ export interface Teacher {
   /** Vị trí nhà: Plus Code, hoặc tâm phường/xã đọc từ địa chỉ. Chỉ có trong seed thật. */
   homeGeo?: GeoPoint
   homeArea?: string
+  /** Thêm trên giao diện: được phép xoá khi chưa có ca nào. */
+  isNew?: boolean
   preferences: Preference[]
 }
 
@@ -100,6 +102,8 @@ export interface School {
   referSource: 'derived' | 'confirmed'
   genderPreference?: Gender | null
   geo?: GeoPoint
+  /** Thêm trên giao diện: được phép xoá khi chưa có ca nào. */
+  isNew?: boolean
 }
 
 export interface Leave {

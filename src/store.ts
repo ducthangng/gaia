@@ -9,6 +9,7 @@ import { DEFAULT_SETTINGS, needsTeacher, type Lesson, type Leave, type School, t
 import { cloneWeek } from './domain/weeks'
 import { applyDraft, applyBulk, newLesson, type BulkAction, type BulkScope, type LessonDraft } from './domain/lesson-edit'
 import { applyLeave, applyLessonLeave, revertLeave, revertLessonLeave } from './domain/leave'
+import { createSchool, createTeacher, type SchoolDraft } from './domain/create-records'
 import { applySchoolAddress } from './domain/data-quality'
 import { applyChanges, type Change } from './domain/optimize'
 import { applyProfile, dropHomeKm, dropHomeLegs, type ProfileDraft } from './domain/teacher-profile'
@@ -34,6 +35,10 @@ interface State extends World {
   applySuggestion: (changes: Change[]) => void
   saveTeacherProfile: (id: string, draft: ProfileDraft) => void
   saveSchoolAddress: (id: string, address: string) => void
+  addTeacher: (id: string, draft: ProfileDraft) => string
+  addSchool: (draft: SchoolDraft) => string
+  deleteNewTeacher: (id: string) => boolean
+  deleteNewSchool: (id: string) => boolean
   setOfficeKm: (officeId: string, schoolId: string, km: number | null) => void
   addLeave: (teacherId: string, from: string, to: string, session: Session | 'ALL', note: string) => number
   addLessonLeave: (teacherId: string, lessonIds: string[], note: string) => number
@@ -146,6 +151,38 @@ export const useStore = create<State>()(
               weeks: s.weeks.map((w) => (w.status === 'planning' ? { ...w, legs: dropHomeLegs(w.legs, id) } : w)),
             }))
           }
+        },
+        addTeacher: (id, draft) => {
+          const teacher = createTeacher(id, draft, seed.places ?? [])
+          set((s) => ({ teachers: [...s.teachers, teacher] }))
+          return teacher.id
+        },
+        addSchool: (draft) => {
+          const school = createSchool(draft, get().schools, seed.places ?? [])
+          set((s) => ({ schools: [...s.schools, school] }))
+          return school.id
+        },
+        // Chỉ xoá được hồ sơ thêm nhầm: chưa từng có ca nào thì không làm mất dữ liệu lịch.
+        deleteNewTeacher: (id) => {
+          const { teachers, weeks } = get()
+          const t = teachers.find((x) => x.id === id)
+          if (!t?.isNew || weeks.some((w) => w.lessons.some((l) => l.teacherId === id || l.originalTeacherId === id))) return false
+          set((s) => ({
+            teachers: s.teachers.filter((x) => x.id !== id),
+            leaves: s.leaves.filter((l) => l.teacherId !== id),
+            schools: s.schools.map((x) => (x.referredTeacherIds.includes(id) ? { ...x, referredTeacherIds: x.referredTeacherIds.filter((r) => r !== id) } : x)),
+          }))
+          return true
+        },
+        deleteNewSchool: (id) => {
+          const { schools, weeks } = get()
+          const x = schools.find((s) => s.id === id)
+          if (!x?.isNew || weeks.some((w) => w.lessons.some((l) => l.schoolId === id))) return false
+          set((s) => ({
+            schools: s.schools.filter((y) => y.id !== id),
+            distances: { ...s.distances, office: Object.fromEntries(Object.entries(s.distances.office).filter(([k]) => !k.endsWith(`|${id}`))) },
+          }))
+          return true
         },
         saveSchoolAddress: (id, address) =>
           set((s) => ({ schools: s.schools.map((x) => (x.id === id ? applySchoolAddress(x, address, seed.places ?? []) : x)) })),

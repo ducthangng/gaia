@@ -1,8 +1,9 @@
-import { AlertTriangle, FileDown, MapPin, PanelLeftClose, PanelLeftOpen, Star, X } from 'lucide-react'
+import { AlertTriangle, FileDown, MapPin, PanelLeftClose, PanelLeftOpen, Plus, Star, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useParams, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import { SchoolsTable } from '../components/InfoTables'
+import { openNewSchoolDialog } from '../components/NewSchoolDialog'
 import { ViewSwitch } from '../components/InlineCell'
 import { MovementPanel, type MovementSelection } from '../components/MovementPanel'
 import { WeekTimeGrid } from '../components/WeekTimeGrid'
@@ -33,7 +34,7 @@ function SchoolsDetail() {
 
   return (
     <div className="mx-auto flex h-full max-w-[1700px] flex-col gap-2">
-    <ViewSwitch />
+    <div className="flex items-center justify-between gap-3"><ViewSwitch /><Button onClick={openNewSchoolDialog}><Plus size={14} />Thêm trường</Button></div>
     <div className={clsx('grid min-h-0 w-full flex-1 gap-4', listOpen ? 'grid-cols-[250px_minmax(0,1fr)]' : 'grid-cols-[minmax(0,1fr)]')}>
       {listOpen && <Card className="flex min-h-0 flex-col self-stretch overflow-hidden">
         <div className="border-b border-slate-100 p-2"><input aria-label="Tìm trường" className="w-full" placeholder="Tìm trường…" value={q} onChange={(e) => setQ(e.target.value)} /></div>

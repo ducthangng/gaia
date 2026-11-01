@@ -6,6 +6,8 @@ import { buildContext, type World } from './context'
 import { decodePlusCode, googleDirectionsUrl, haversineKm, isPrecise, parseLatLng, roadKm, wardOf } from './geo'
 import { movementTo } from './movement'
 import { applyChanges, MAX_LOAD_SHIFT, suggestOptimizations } from './optimize'
+import { createSchool, createTeacher, emptyProfile, nextTeacherId, schoolDraftErrors, schoolFullName, teacherIdError } from './create-records'
+import { rankCandidates } from './recommend'
 import { applySchoolAddress, missingSchoolFields, missingTeacherFields, parseCoordinate } from './data-quality'
 import { applyProfile, dropHomeKm, dropHomeLegs, locateAddress, profileErrors, profileFrom } from './teacher-profile'
 import { deriveRoute } from './route'
@@ -527,5 +529,59 @@ describe('mức độ đầy đủ thông tin', () => {
     expect(parseCoordinate('10.5, 107.1')).toEqual({ lat: 10.5, lng: 107.1 })
     expect(parseCoordinate('J348+3JW')).toMatchObject({ lat: 10.605237 })
     expect(parseCoordinate('abc')).toBeNull()
+  })
+})
+
+describe('thêm giáo viên', () => {
+  const list = [{ id: 'VT049' }, { id: 'VT001' }, { id: 'GV001' }, { id: 'CTVVT12' }]
+  it('gợi ý mã kế tiếp sau mã lớn nhất', () => {
+    expect(nextTeacherId(list)).toBe('VT050')
+    expect(nextTeacherId([])).toBe('VT001')
+  })
+  it('chặn mã trống, sai định dạng, trùng (không phân biệt hoa thường)', () => {
+    expect(teacherIdError('', list)).toBeTruthy()
+    expect(teacherIdError('VT 50', list)).toBeTruthy()
+    expect(teacherIdError('vt001', list)).toContain('đã có')
+    expect(teacherIdError('VT050', list)).toBeNull()
+  })
+  it('hồ sơ mới đang hoạt động, định vị theo địa chỉ và được gợi ý dạy', () => {
+    const places = [{ name: 'Phú Mỹ', lat: 10.6, lng: 107.05 }]
+    const t = createTeacher('vt050', { ...emptyProfile('PM'), name: 'Mới', address: '1 Lê Lợi, Phú Mỹ', track: 'STEM/CDS/AI', areas: ['PHÚ MỸ'] }, places)
+    expect(t).toMatchObject({ id: 'VT050', active: true, isNew: true, officeId: 'PM', homeArea: 'Phú Mỹ', homeGeo: { source: 'ward' } })
+    const target = week.lessons.find((l) => l.status === 'assigned' && l.subject === 'STEM')!
+    const ranked = rankCandidates({ ...target, teacherId: null, status: 'needs_cover' }, buildContext(week, { ...world, teachers: [...world.teachers, t] }))
+    const me = ranked.find((c) => c.teacher.id === 'VT050')!
+    expect(me.available).toBe(true)
+    expect(me.taughtSubject).toBe(true)
+  })
+  it('CTV nhận đúng loại', () => {
+    expect(createTeacher('CTVVT99', { ...emptyProfile('BR'), name: 'A' }, []).isCollaborator).toBe(true)
+  })
+})
+
+describe('thêm trường', () => {
+  const draft = (over = {}) => ({ name: 'TH Mới', region: 'Phú Mỹ', address: '', consultant: '', ...over })
+  it('bắt buộc tên và khu vực', () => {
+    expect(schoolDraftErrors(draft({ name: '', region: '' }), seed.schools)).toHaveLength(2)
+    expect(schoolDraftErrors(draft(), seed.schools)).toEqual([])
+  })
+  it('chặn trùng trường kể cả khác dấu, hoa thường', () => {
+    expect(schoolDraftErrors(draft({ name: 'th quang trung', region: 'phu my' }), seed.schools)[0]).toContain('Đã có trường')
+  })
+  it('trùng tên khác khu vực thì bắt buộc có địa chỉ', () => {
+    const same = draft({ name: 'TH Quang Trung', region: 'Vũng Tàu' })
+    expect(schoolDraftErrors(same, seed.schools)[0]).toContain('địa chỉ')
+    expect(schoolDraftErrors({ ...same, address: '1 Lê Lợi' }, seed.schools)).toEqual([])
+  })
+  it('tạo trường: tên đầy đủ, mã không trùng, Plus Code cho vị trí chính xác', () => {
+    expect(schoolFullName(draft())).toBe('TH Mới - Phú Mỹ')
+    const s = createSchool(draft({ address: 'J348+3JW' }), seed.schools, [])
+    expect(s).toMatchObject({ id: 'th-moi-phu-my', fullName: 'TH Mới - Phú Mỹ', isNew: true, geo: { source: 'pluscode' } })
+    expect(createSchool(draft(), [...seed.schools, s], []).id).toBe('th-moi-phu-my-2')
+  })
+  it('trường mới chưa có ca không vào danh sách số ca nhưng thêm ca được', () => {
+    const s = createSchool(draft(), seed.schools, [])
+    expect(schoolLoad(week.lessons).has(s.id)).toBe(false)
+    expect(newLesson('n', week.id, s.id, { date: '2026-11-02', start: '08:00', end: '08:35', className: '1A', subject: 'STEM', teacherId: '', note: '' }).schoolId).toBe(s.id)
   })
 })

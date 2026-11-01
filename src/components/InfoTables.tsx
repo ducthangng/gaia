@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Check, CircleAlert } from 'lucide-react'
+import { Check, CircleAlert, Plus, Trash2 } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { missingSchoolFields, missingTeacherFields, parseCoordinate } from '../domain/data-quality'
@@ -10,7 +10,9 @@ import type { GeoPoint, School, Teacher } from '../domain/types'
 import { useWeekContext } from '../hooks'
 import { useStore } from '../store'
 import { TextCell, ViewSwitch } from './InlineCell'
-import { Badge, toast } from './ui'
+import { openNewSchoolDialog } from './NewSchoolDialog'
+import { openNewTeacherDialog } from './TeacherProfileDialog'
+import { Badge, Button, toast } from './ui'
 
 const Th = ({ children, className }: { children?: ReactNode; className?: string }) => (
   <th className={clsx('sticky top-0 z-10 whitespace-nowrap border-b border-slate-200 bg-slate-100 px-2 py-2 text-left text-xs font-semibold text-slate-600', className)}>{children}</th>
@@ -21,7 +23,7 @@ const ANY = '__any__'
 /** Lọc theo từng loại thông tin còn thiếu. Một thông tin ai cũng thiếu sẽ không làm mất tác dụng của bộ lọc. */
 const passes = (missing: string[], filter: string) => !filter || (filter === ANY ? missing.length > 0 : missing.includes(filter))
 
-function Toolbar({ title, q, setQ, filter, setFilter, fields, shown, total, missingOf, extra }: { title: string; q: string; setQ: (v: string) => void; filter: string; setFilter: (v: string) => void; fields: string[]; shown: number; total: number; missingOf: string[][]; extra?: ReactNode }) {
+function Toolbar({ title, q, setQ, filter, setFilter, fields, shown, total, missingOf, extra, action }: { action?: ReactNode; title: string; q: string; setQ: (v: string) => void; filter: string; setFilter: (v: string) => void; fields: string[]; shown: number; total: number; missingOf: string[][]; extra?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <ViewSwitch />
@@ -35,6 +37,7 @@ function Toolbar({ title, q, setQ, filter, setFilter, fields, shown, total, miss
         </select>
       </label>
       {extra}
+      {action}
       <span className="ml-auto flex items-center gap-3 text-xs text-slate-500">
         <span className="inline-flex items-center gap-1"><span className="inline-block h-3 w-4 rounded-sm bg-amber-100" />Còn thiếu</span>
         <span data-testid="table-count">{shown}/{total} dòng · Bấm vào ô để sửa, lưu tự động</span>
@@ -58,6 +61,7 @@ const GEO_TEXT: Record<GeoPoint['source'], { label: string; tone: 'green' | 'amb
 export function TeachersTable() {
   const ctx = useWeekContext()
   const save = useStore((s) => s.saveTeacherProfile)
+  const deleteTeacher = useStore((s) => s.deleteNewTeacher)
   const distances = useStore((s) => s.distances)
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState('')
@@ -75,7 +79,7 @@ export function TeachersTable() {
   const rule = (field: keyof ProfileDraft, t: Teacher) => (v: string) => profileErrors({ ...profileFrom(t), [field]: v })[0] ?? null
   return (
     <div className="flex h-full flex-col gap-3">
-      <Toolbar title="Thông tin giáo viên" q={q} setQ={setQ} filter={filter} setFilter={setFilter} fields={['SĐT', 'Địa chỉ', 'Vị trí nhà', 'Năng lực', 'Khu vực mong muốn', 'Giới tính']} shown={rows.length} total={active.length} missingOf={active.map(missingTeacherFields)} />
+      <Toolbar title="Thông tin giáo viên" q={q} setQ={setQ} filter={filter} setFilter={setFilter} fields={['SĐT', 'Địa chỉ', 'Vị trí nhà', 'Năng lực', 'Khu vực mong muốn', 'Giới tính']} shown={rows.length} total={active.length} missingOf={active.map(missingTeacherFields)} action={<Button onClick={openNewTeacherDialog}><Plus size={14} />Thêm giáo viên</Button>} />
       <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white">
         <table className="w-full border-separate border-spacing-0" data-testid="teacher-table">
           <thead><tr>
@@ -103,7 +107,7 @@ export function TeachersTable() {
                   <td className={clsx('border-b border-slate-100 p-0.5', !t.gender && 'bg-amber-100')}><select aria-label={`Giới tính ${t.id}`} className="!border-transparent !bg-transparent hover:!border-slate-300" value={t.gender ?? ''} onChange={(e) => update(t, { gender: e.target.value as ProfileDraft['gender'] })}><option value="">Chưa khai</option><option value="F">Nữ</option><option value="M">Nam</option></select></td>
                   <td className="border-b border-slate-100 p-0.5"><TextCell className="min-w-[64px]" label={`Km tối đa ${t.id}`} align="right" inputMode="numeric" value={t.maxKm === null ? '' : String(t.maxKm)} validate={rule('maxKm', t)} onSave={(v) => update(t, { maxKm: v })} /></td>
                   <td className="border-b border-slate-100 px-2 py-1.5 text-center"><input type="checkbox" aria-label={`Chỉ làm online ${t.id}`} checked={t.onlineOnly} onChange={(e) => update(t, { onlineOnly: e.target.checked })} /></td>
-                  <td className="border-b border-slate-100 px-2 py-1.5"><MissingCell missing={missing} /></td>
+                  <td className="border-b border-slate-100 px-2 py-1.5"><div className="flex items-center gap-2"><MissingCell missing={missing} />{t.isNew && <button aria-label={`Xoá ${t.id}`} title="Xoá giáo viên vừa thêm (chỉ khi chưa có ca nào)" className="text-slate-400 hover:text-red-600" onClick={() => toast(deleteTeacher(t.id) ? `Đã xoá ${t.id}` : `${t.id} đã có ca dạy nên không xoá được`)}><Trash2 size={13} /></button>}</div></td>
                 </tr>
               )
             })}
@@ -121,11 +125,13 @@ export function SchoolsTable() {
   const updateSchool = useStore((s) => s.updateSchool)
   const saveAddress = useStore((s) => s.saveSchoolAddress)
   const setOfficeKm = useStore((s) => s.setOfficeKm)
+  const deleteSchool = useStore((s) => s.deleteNewSchool)
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState('')
   const [onlyActive, setOnlyActive] = useState(true)
   const load = useMemo(() => schoolLoad(ctx.week.lessons), [ctx.week.lessons])
-  const scope = ctx.world.schools.filter((s) => !onlyActive || (load.get(s.id) ?? 0) > 0)
+  // Trường vừa thêm chưa có ca nhưng vẫn phải thấy ngay để điền tiếp thông tin.
+  const scope = ctx.world.schools.filter((s) => !onlyActive || s.isNew || (load.get(s.id) ?? 0) > 0)
   const rows = scope
     .filter((s) => `${s.fullName} ${s.address ?? ''} ${s.region ?? ''}`.toLowerCase().includes(q.trim().toLowerCase()))
     .filter((s) => passes(missingSchoolFields(s, distances), filter))
@@ -137,7 +143,7 @@ export function SchoolsTable() {
   }
   return (
     <div className="flex h-full flex-col gap-3">
-      <Toolbar title="Thông tin trường" q={q} setQ={setQ} filter={filter} setFilter={setFilter} fields={['Địa chỉ', 'Toạ độ chính xác', 'Km từ văn phòng']} shown={rows.length} total={scope.length} missingOf={scope.map((s) => missingSchoolFields(s, distances))}
+      <Toolbar title="Thông tin trường" q={q} setQ={setQ} filter={filter} setFilter={setFilter} fields={['Địa chỉ', 'Toạ độ chính xác', 'Km từ văn phòng']} shown={rows.length} total={scope.length} missingOf={scope.map((s) => missingSchoolFields(s, distances))} action={<Button onClick={openNewSchoolDialog}><Plus size={14} />Thêm trường</Button>}
         extra={<label className="flex items-center gap-1.5"><input type="checkbox" checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} />Chỉ trường có lịch tuần này</label>} />
       <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white">
         <table className="w-full border-separate border-spacing-0" data-testid="school-table">
@@ -159,7 +165,7 @@ export function SchoolsTable() {
                 {ctx.world.offices.map((o) => <td key={o.id} className="border-b border-slate-100 p-0.5">{kmCell(s, o.id)}</td>)}
                 <td className="border-b border-slate-100 p-0.5"><TextCell className="min-w-[190px]" label={`Phụ trách ${s.fullName}`} value={s.consultant ?? ''} onSave={(v) => updateSchool(s.id, { consultant: v || null })} /></td>
                 <td className="whitespace-nowrap border-b border-slate-100 px-2 py-1.5 text-xs">{s.referredTeacherIds.length} GV {s.referSource === 'derived' ? <Badge tone="amber" title="Suy từ lịch sử dạy, cần Gaia xác nhận">tạm</Badge> : <Badge tone="green">đã xác nhận</Badge>}</td>
-                <td className="border-b border-slate-100 px-2 py-1.5"><MissingCell missing={missingSchoolFields(s, distances)} /></td>
+                <td className="border-b border-slate-100 px-2 py-1.5"><div className="flex items-center gap-2"><MissingCell missing={missingSchoolFields(s, distances)} />{s.isNew && <button aria-label={`Xoá ${s.fullName}`} title="Xoá trường vừa thêm (chỉ khi chưa có ca nào)" className="text-slate-400 hover:text-red-600" onClick={() => toast(deleteSchool(s.id) ? `Đã xoá ${s.fullName}` : 'Trường đã có ca nên không xoá được')}><Trash2 size={13} /></button>}</div></td>
               </tr>
             ))}
           </tbody>

@@ -1,0 +1,70 @@
+import clsx from 'clsx'
+import { ArchiveRestore, Calculator, CalendarRange, Database, GraduationCap, LayoutDashboard, Lock, ScanLine, School, Settings, ShieldAlert } from 'lucide-react'
+import { NavLink, Outlet } from 'react-router-dom'
+import { shortDate } from '../domain/time'
+import { useActiveWeek, useStore } from '../store'
+import { Toaster } from './ui'
+
+const NAV = [
+  { to: '/', label: 'Bảng tổng quan', icon: LayoutDashboard, end: true },
+  { to: '/schools', label: 'Theo trường', icon: School },
+  { to: '/teachers', label: 'Theo giáo viên', icon: GraduationCap },
+  { to: '/costs', label: 'Chi phí di chuyển', icon: Calculator },
+  { to: '/weeks', label: 'Lịch tuần & lưu trữ', icon: CalendarRange },
+  { to: '/import', label: 'Nhập ảnh lịch (OCR)', icon: ScanLine },
+  { to: '/data', label: 'Nguồn dữ liệu', icon: Database },
+  { to: '/settings', label: 'Cấu hình', icon: Settings },
+]
+
+export function Layout() {
+  const weeks = useStore((s) => s.weeks)
+  const setActiveWeek = useStore((s) => s.setActiveWeek)
+  const anonymized = useStore((s) => s.anonymized)
+  const week = useActiveWeek()
+  const archived = week.status === 'archived'
+  return (
+    <div className="flex h-full">
+      <aside className="flex w-56 shrink-0 flex-col border-r border-slate-200 bg-white">
+        <div className="border-b border-slate-100 px-4 py-3.5">
+          <div className="text-[15px] font-semibold tracking-tight text-emerald-800">Gaia</div>
+          <div className="text-xs text-slate-500">Điều phối lịch dạy · Vũng Tàu</div>
+        </div>
+        <nav className="flex-1 space-y-0.5 p-2">
+          {NAV.map(({ to, label, icon: Icon, end }) => (
+            <NavLink key={to} to={to} end={end} className={({ isActive }) => clsx('flex items-center gap-2.5 rounded-md px-2.5 py-1.5 font-medium', isActive ? 'bg-emerald-50 text-emerald-800' : 'text-slate-600 hover:bg-slate-100')}>
+              <Icon size={15} />
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+        {anonymized && (
+          <div className="m-2 flex gap-1.5 rounded-md bg-slate-100 p-2 text-xs text-slate-600">
+            <ShieldAlert size={14} className="mt-0.5 shrink-0" />
+            Bản demo đã ẩn danh giáo viên.
+          </div>
+        )}
+      </aside>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-5 py-2.5">
+          <label className="text-xs font-medium text-slate-500" htmlFor="week-select">Tuần</label>
+          <select id="week-select" value={week.id} onChange={(e) => setActiveWeek(e.target.value)} className="font-medium">
+            {[...weeks].reverse().map((w) => (
+              <option key={w.id} value={w.id}>
+                {shortDate(w.startDate)} – {shortDate(w.endDate)} · {w.status === 'planning' ? 'Đang lập' : 'Đã lưu trữ'}
+              </option>
+            ))}
+          </select>
+          {archived ? (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600"><Lock size={13} />Đã đóng băng: chỉ xem và đối soát</span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><ArchiveRestore size={13} />Đang lập kế hoạch: có thể chỉnh sửa</span>
+          )}
+        </header>
+        <main className="min-h-0 flex-1 overflow-auto p-5">
+          <Outlet />
+        </main>
+      </div>
+      <Toaster />
+    </div>
+  )
+}

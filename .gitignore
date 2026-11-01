@@ -1,0 +1,7 @@
+node_modules
+dist
+.vercel
+*.local
+# Dữ liệu thật: có SĐT và địa chỉ nhà của giáo viên
+*.xlsx
+src/data/seed.local.json

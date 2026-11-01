@@ -1,6 +1,6 @@
 import { autoUpdate, flip, FloatingPortal, offset, shift, size, useClick, useDismiss, useFloating, useInteractions } from '@floating-ui/react'
 import clsx from 'clsx'
-import { AlertTriangle, Ban, CalendarOff, Check, Search, Star, UserMinus } from 'lucide-react'
+import { AlertTriangle, Ban, CalendarOff, Check, MapPinned, Search, Star, UserMinus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { blockerLabel } from '../domain/constraints'
 import { rankCandidates, type Candidate } from '../domain/recommend'
@@ -19,7 +19,15 @@ export const subjectStyle = (subject: string | null) => {
 
 const TYPE_LABEL: Partial<Record<Lesson['type'], string>> = { substitute: 'Dạy thay', makeup: 'Dạy bù', support: 'Hỗ trợ', event: 'Chuyên đề', observe: 'Dự giờ' }
 
-export function LessonChip({ lesson: l, ctx, show }: { lesson: Lesson; ctx: Ctx; show: 'teacher' | 'school' }) {
+export function LessonChip({ lesson: l, ctx, show, fill, mark, onShowOnMap }: {
+  lesson: Lesson
+  ctx: Ctx
+  show: 'teacher' | 'school'
+  /** Hiện trong ô lưới giờ: lấp đầy ô và thu gọn nội dung. */
+  fill?: boolean
+  mark?: 'critical' | 'warning'
+  onShowOnMap?: (l: Lesson) => void
+}) {
   const [open, setOpen] = useState(false)
   const { refs, floatingStyles, context } = useFloating({
     open,
@@ -44,27 +52,32 @@ export function LessonChip({ lesson: l, ctx, show }: { lesson: Lesson; ctx: Ctx;
         ref={refs.setReference}
         {...getReferenceProps()}
         className={clsx(
-          'block w-full rounded border px-1.5 py-1 text-left leading-tight transition hover:ring-2 hover:ring-emerald-500/40',
+          'block w-full rounded border text-left leading-tight transition hover:ring-2 hover:ring-emerald-500/40',
+          fill ? '@container relative h-full overflow-hidden px-1 py-0.5 text-[11px] hover:z-10' : 'px-1.5 py-1',
+          mark === 'critical' && 'ring-2 ring-red-500',
+          mark === 'warning' && 'ring-2 ring-amber-500',
+          l.type === 'substitute' && !uncovered && 'border-l-4 border-l-slate-700',
+          l.type === 'makeup' && !uncovered && 'border-dashed',
           uncovered ? 'border-red-300 bg-red-50' : off || replaced || cancelled ? 'border-slate-200 bg-slate-100 text-slate-500' : subjectStyle(l.subject),
           open && 'ring-2 ring-emerald-600',
         )}
       >
         <div className="flex items-center justify-between gap-1">
-          <span className="tnum text-[11px] text-slate-500">{l.start ?? `Tiết ${l.period}`}</span>
+          <span className="tnum shrink-0 whitespace-nowrap text-[11px] text-slate-500">{l.start ?? `Tiết ${l.period}`}{fill && l.end && <span className="hidden @[135px]:inline">–{l.end}</span>}</span>
           <span className="truncate text-[11px] text-slate-500">{l.subject}</span>
         </div>
         <div className={clsx('truncate font-medium', (off || replaced || cancelled) && 'line-through')}>{l.className ?? l.note ?? '—'}</div>
-        <div className={clsx('truncate text-xs', uncovered ? 'font-medium text-red-700' : 'text-slate-600')}>
+        <div className={clsx('truncate', fill ? 'text-[11px]' : 'text-xs', uncovered ? 'font-medium text-red-700' : 'text-slate-600')}>
           {uncovered ? (
             <span className="inline-flex items-center gap-1"><AlertTriangle size={11} />Cần giáo viên</span>
           ) : off ? 'Trường báo nghỉ' : replaced ? 'GV nghỉ, đã có người thay' : cancelled ? 'Huỷ do GV nghỉ' : show === 'teacher' ? (teacher ? teacherLabel(teacher) : l.teacherId) : school?.fullName}
         </div>
-        {typeLabel && !off && !replaced && !cancelled && !uncovered && <div className="truncate text-[11px] text-slate-500">{typeLabel}</div>}
+        {!fill && typeLabel && !off && !replaced && !cancelled && !uncovered && <div className="truncate text-[11px] text-slate-500">{typeLabel}</div>}
       </button>
       {open && (
         <FloatingPortal>
           <div ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()} className="z-40 flex w-[460px] max-w-[95vw] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
-            <AssignPanel lesson={l} ctx={ctx} close={() => setOpen(false)} />
+            <AssignPanel lesson={l} ctx={ctx} close={() => setOpen(false)} onShowOnMap={onShowOnMap} />
           </div>
         </FloatingPortal>
       )}
@@ -72,7 +85,7 @@ export function LessonChip({ lesson: l, ctx, show }: { lesson: Lesson; ctx: Ctx;
   )
 }
 
-function AssignPanel({ lesson: l, ctx, close }: { lesson: Lesson; ctx: Ctx; close: () => void }) {
+function AssignPanel({ lesson: l, ctx, close, onShowOnMap }: { lesson: Lesson; ctx: Ctx; close: () => void; onShowOnMap?: (l: Lesson) => void }) {
   const assign = useStore((s) => s.assign)
   const requestCover = useStore((s) => s.requestCover)
   const markSchoolOff = useStore((s) => s.markSchoolOff)
@@ -99,6 +112,9 @@ function AssignPanel({ lesson: l, ctx, close }: { lesson: Lesson; ctx: Ctx; clos
           {original && original.id !== current?.id && <span className="text-slate-500"> · GV gốc: {teacherLabel(original)}</span>}
         </div>
         {l.note && <div className="mt-0.5 text-xs text-slate-500">Ghi chú: {l.note}</div>}
+        {onShowOnMap && l.teacherId && (
+          <Button className="mt-2 !py-1 text-xs" onClick={() => { onShowOnMap(l); close() }}><MapPinned size={13} />Xem đường đi trên bản đồ</Button>
+        )}
         {!readOnly && (
           <div className="mt-2 flex gap-1.5">
             {l.status === 'assigned' && <Button className="!py-1 text-xs" onClick={() => { requestCover(l.id); toast('Đã chuyển ca sang cần dạy thay') }}><UserMinus size={13} />Cần dạy thay</Button>}

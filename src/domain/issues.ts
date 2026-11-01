@@ -1,6 +1,6 @@
 import { blockers, preferenceViolations } from './constraints'
 import type { WeekContext } from './context'
-import { byTime, isOnSite } from './route'
+import { byTime } from './route'
 import { needsTeacher, teacherLabel, TEACHING_CODES, type Lesson, type Teacher } from './types'
 
 export type IssueKind = 'uncovered' | 'overlap' | 'leave' | 'travel' | 'preference' | 'refer'
@@ -89,22 +89,8 @@ export function schoolLoad(lessons: Lesson[]) {
   return load
 }
 
-export interface Transfer {
-  otherSchoolId: string
-  count: number
-}
-
-/** Số lần GV di chuyển giữa trường này và các trường khác trong tuần, để vẽ lên bản đồ. */
-export function schoolTransfers(ctx: WeekContext, schoolId: string): Transfer[] {
-  const counts = new Map<string, number>()
-  for (const day of ctx.dayLessons.values()) {
-    const sorted = day.filter(isOnSite).sort(byTime)
-    for (let i = 1; i < sorted.length; i++) {
-      const [a, b] = [sorted[i - 1].schoolId, sorted[i].schoolId]
-      if (a === b || (a !== schoolId && b !== schoolId)) continue
-      const other = a === schoolId ? b : a
-      counts.set(other, (counts.get(other) ?? 0) + 1)
-    }
-  }
-  return [...counts].map(([otherSchoolId, count]) => ({ otherSchoolId, count })).sort((x, y) => y.count - x.count)
+/** Điểm sắp xếp "nhiều lỗi nhất": lỗi nghiêm trọng trước, rồi không kịp, rồi ghi chú. */
+export function issueScore(issues: Issue[]) {
+  const n = (s: Severity) => issues.filter((i) => ISSUE_META[i.kind].severity === s).length
+  return { urgent: n('critical') + n('warning'), rank: n('critical') * 1e6 + n('warning') * 1e3 + n('info') }
 }

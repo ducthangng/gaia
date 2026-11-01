@@ -11,7 +11,7 @@ export interface PrefViolation {
   label: string
 }
 
-// Khu vực có trong cột KHU VỰC của giáo viên; trường ở nơi khác (Hồ Tràm, Long Hải...) không so được.
+// Khu vực có trong cột KHU VỰC (nơi GV mong muốn đi dạy); trường ở nơi khác (Hồ Tràm, Long Hải...) không so được.
 const KNOWN_AREAS = new Set(['PHÚ MỸ', 'CHÂU ĐỨC', 'BÀ RỊA', 'VŨNG TÀU', 'PHƯỚC HẢI'])
 
 const appliesOn = (days: number[] | undefined, date: string) => !days?.length || days.includes(dayIndex(date))
@@ -33,7 +33,7 @@ export function preferenceViolations(t: Teacher, l: Lesson, school: School | und
   }
   const region = school?.region?.trim().toUpperCase()
   if (t.areas.length && region && KNOWN_AREAS.has(region) && !t.areas.includes(region)) {
-    out.push({ label: `Ngoài khu vực đăng ký (${t.areas.join(', ')})` })
+    out.push({ label: `Ngoài khu vực mong muốn (${t.areas.join(', ')})` })
   }
   if (t.maxKm !== null && km !== undefined && km > t.maxKm) {
     out.push({ label: `Vượt phạm vi di chuyển ${t.maxKm} km` })

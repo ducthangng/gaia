@@ -60,7 +60,7 @@ function TeacherDetail({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
           {t.track && <Badge tone="blue">{t.track}</Badge>}
           {t.isCollaborator && <Badge tone="violet">Cộng tác viên</Badge>}
           {t.onlineOnly && <Badge tone="amber">Chỉ làm online</Badge>}
-          {t.areas.length > 0 && <span title="Khu vực giáo viên đăng ký dạy">Khu vực: {t.areas.join(', ')}</span>}
+          {t.areas.length > 0 && <span>Khu vực mong muốn: {t.areas.join(', ')}</span>}
         </span>}
         actions={<>
           <Button variant="primary" onClick={() => openLeaveDialog({ teacherId: t.id })}><CalendarOff size={14} />Xin nghỉ</Button>

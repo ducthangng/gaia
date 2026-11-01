@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Check, ExternalLink } from 'lucide-react'
+import { Check, ExternalLink, MapPinned } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { LessonChip } from '../components/LessonChip'
@@ -54,7 +54,10 @@ export function AlertsPage() {
                     <Link to={`/schools/${i.lesson.schoolId}`} className="mt-0.5 block truncate text-slate-700 hover:text-emerald-700 hover:underline">{ctx.schoolById.get(i.lesson.schoolId)?.fullName}</Link>
                     <div className="text-xs text-slate-500">{i.detail}</div>
                     <PairDetail issue={i} ctx={ctx} />
-                    {link && <a className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:underline" href={link} target="_blank" rel="noreferrer"><ExternalLink size={12} />Chỉ đường Google Maps</a>}
+                    <div className="mt-1 flex flex-wrap gap-3 text-xs font-medium text-emerald-700">
+                      {i.lesson.teacherId && <Link className="inline-flex items-center gap-1 hover:underline" to={`/schools/${i.lesson.schoolId}?lesson=${i.lesson.id}`}><MapPinned size={12} />Xem trên bản đồ</Link>}
+                      {link && <a className="inline-flex items-center gap-1 hover:underline" href={link} target="_blank" rel="noreferrer"><ExternalLink size={12} />Chỉ đường Google Maps</a>}
+                    </div>
                   </div>
                   <LessonChip lesson={i.lesson} ctx={ctx} show="teacher" />
                 </li>

@@ -56,6 +56,9 @@ export class DistanceBook {
     const exact = this.distances.home[`${teacherId}|${schoolId}`]
     if (exact !== undefined) return { km: exact, source: 'recorded' }
     const teacher = this.teachers.get(teacherId)
+    const school = this.schools.get(schoolId)?.geo
+    // Vị trí nhà theo phường/xã vẫn sát hơn trung vị cả khu vực, nhưng vẫn chỉ là ước tính.
+    if (teacher?.homeGeo && isPrecise(school)) return { km: roadKm(teacher.homeGeo, school), source: 'estimated' }
     const samples = this.districtRegion.get(`${norm(teacher?.district)}|${this.region(schoolId)}`)
     if (samples) return { km: median(samples), source: 'estimated' }
     return { km: this.fromOffice(teacher?.officeId ?? 'BR', schoolId).km, source: 'estimated' }

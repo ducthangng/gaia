@@ -3,7 +3,7 @@ import type { GeoPoint } from './types'
 /** Đường bộ thực tế dài hơn đường chim bay; hệ số đo từ các cặp trường có km đã ghi. */
 const ROAD_FACTOR = 1.3
 
-export const isPrecise = (g: GeoPoint | undefined): g is GeoPoint => !!g && g.source !== 'region'
+export const isPrecise = (g: GeoPoint | undefined): g is GeoPoint => !!g && g.source !== 'region' && g.source !== 'ward'
 
 export function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
   const rad = (d: number) => (d * Math.PI) / 180
@@ -35,3 +35,24 @@ export const googleDirectionsUrl = (from: MapPlace, to: MapPlace) =>
   `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(placeParam(from))}&destination=${encodeURIComponent(placeParam(to))}&travelmode=driving`
 
 export const googleSearchUrl = (p: MapPlace) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(placeParam(p))}`
+
+const CITY = /^(thành phố |tp\.?\s*)?(hồ chí minh|ho chi minh|hcm)$|^(việt nam|vietnam)$/i
+const WARD_PREFIX = /^(phường|xã|p\.|x\.)\s*/i
+
+/** Phường/xã lấy từ địa chỉ; địa chỉ chỉ có Plus Code hoặc không có thì dùng khu vực của trường. */
+export function wardOf(school: { address: string | null; region: string | null }): string {
+  const fallback = school.region?.trim() || '—'
+  if (!school.address) return fallback
+  const parts = school.address
+    .split(/\bCS2\b/)[0]
+    .replace(/\(.*?\)/g, '')
+    .replace(/^CS1\s*:\s*/i, '')
+    .split(',')
+    .map((p) => p.trim().replace(/\.$/, ''))
+    .filter((p) => p && !CITY.test(p))
+  const named = parts.find((p) => WARD_PREFIX.test(p))
+  if (named) return /\d/.test(named) ? named : named.replace(WARD_PREFIX, '')
+  const rest = parts.slice(1)
+  const last = rest.at(-1)?.replace(/^thành phố\s*/i, '')
+  return last || fallback
+}

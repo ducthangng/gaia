@@ -60,12 +60,14 @@ export function DataPage() {
     setGrid(null)
   }
 
+  const active = s.teachers.filter((t) => t.active)
   const gaps = [
     { label: 'Trường có địa chỉ cụ thể', done: s.schools.filter((x) => x.address).length, total: s.schools.length },
     { label: 'Trường đã xác nhận danh sách Refer', done: s.schools.filter((x) => x.referSource === 'confirmed').length, total: s.schools.length },
-    { label: 'Giáo viên đã khai giới tính', done: s.teachers.filter((t) => t.gender).length, total: s.teachers.length },
-    { label: 'Giáo viên đã khai phạm vi di chuyển', done: s.teachers.filter((t) => t.maxKm !== null).length, total: s.teachers.length },
-    { label: 'Giáo viên đã khai nguyện vọng', done: s.teachers.filter((t) => t.preferences.length).length, total: s.teachers.length },
+    { label: 'Giáo viên đã khai giới tính', done: active.filter((t) => t.gender).length, total: active.length },
+    { label: 'Giáo viên có khu vực mong muốn', done: active.filter((t) => t.areas.length).length, total: active.length },
+    { label: 'Giáo viên có địa chỉ nhà', done: active.filter((t) => t.address).length, total: active.length },
+    { label: 'Giáo viên đã khai nguyện vọng về giờ dạy', done: active.filter((t) => t.preferences.length).length, total: active.length },
   ]
 
   return (
@@ -109,7 +111,7 @@ export function DataPage() {
           )}
         </div>
       </Card>
-      <Card title="Dữ liệu còn thiếu so với tài liệu dự án">
+      <Card title="Mức độ đầy đủ của dữ liệu">
         <ul className="divide-y divide-slate-100">
           {gaps.map((g) => (
             <li key={g.label} className="flex items-center justify-between px-4 py-2">

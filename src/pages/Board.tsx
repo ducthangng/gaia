@@ -1,10 +1,11 @@
 import { autoUpdate, flip, FloatingPortal, offset, shift, useDismiss, useFloating, useFocus, useHover, useInteractions, useRole } from '@floating-ui/react'
 import clsx from 'clsx'
-import { AlertOctagon, AlertTriangle, Check, FileDown, Info, Sparkles } from 'lucide-react'
+import { AlertOctagon, AlertTriangle, ArrowDown, ArrowUp, Check, FileDown, Info, Sparkles } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Button, Card, PageHeader, Stat, toast } from '../components/ui'
-import { coverage, healthOf, ISSUE_META, schoolLoad, touchesSchool, type Health, type Issue, type IssueKind } from '../domain/issues'
+import { wardOf } from '../domain/geo'
+import { coverage, healthOf, issueScore, ISSUE_META, schoolLoad, touchesSchool, type Health, type Issue, type IssueKind } from '../domain/issues'
 import { DAY_LABELS, money, shortDate, weekDates } from '../domain/time'
 import { needsTeacher } from '../domain/types'
 import { useWeekContext, useWeekIssues, weekCosts } from '../hooks'
@@ -60,6 +61,24 @@ function HealthCell({ schoolId, schoolName, date, count, issues }: { schoolId: s
   )
 }
 
+type SortKey = 'load' | 'errors' | 'ward' | 'region' | 'name'
+const SORT_LABEL: Record<SortKey, string> = { load: 'Số ca', errors: 'Số lỗi', ward: 'Phường/xã', region: 'Khu vực', name: 'Tên trường' }
+/** Số thì mặc định từ cao xuống thấp, chữ thì theo A-Z. */
+const DEFAULT_DESC: Record<SortKey, boolean> = { load: true, errors: true, ward: false, region: false, name: false }
+
+function SortHeader({ k, sort, onSort, align, children }: { k: SortKey; sort: { key: SortKey; desc: boolean }; onSort: (k: SortKey) => void; align?: 'right'; children: string }) {
+  const active = sort.key === k
+  const Arrow = sort.desc ? ArrowDown : ArrowUp
+  return (
+    <th aria-sort={active ? (sort.desc ? 'descending' : 'ascending') : 'none'} className={clsx('px-2 py-2 font-medium first:pl-4', align === 'right' && 'text-right')}>
+      <button onClick={() => onSort(k)} className={clsx('inline-flex items-center gap-0.5 hover:text-slate-900', active && 'font-semibold text-slate-900')}>
+        {children}
+        {active && <Arrow size={11} />}
+      </button>
+    </th>
+  )
+}
+
 function KpiLink({ kind, ...props }: { kind: IssueKind } & Parameters<typeof Stat>[0]) {
   return <Link to={`/alerts?kind=${kind}`} className="block transition hover:brightness-95"><Stat {...props} /></Link>
 }
@@ -75,11 +94,12 @@ export function BoardPage() {
   const totalKm = costs.reduce((s, c) => s + c.km, 0)
   const dates = useMemo(() => weekDates(ctx.week.startDate), [ctx.week.startDate])
   const planning = ctx.week.status === 'planning'
+  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'load', desc: true })
+  const onSort = (key: SortKey) => setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: DEFAULT_DESC[key] }))
 
   const rows = useMemo(() => {
     const load = schoolLoad(ctx.week.lessons)
-    return [...load.entries()]
-      .sort(([a, x], [b, y]) => y - x || (ctx.schoolById.get(a)?.fullName ?? a).localeCompare(ctx.schoolById.get(b)?.fullName ?? b, 'vi'))
+    const list = [...load.entries()]
       .map(([id, total]) => {
         const mine = issues.filter((i) => touchesSchool(i, id))
         const days = dates.map((d) => ({
@@ -87,9 +107,22 @@ export function BoardPage() {
           count: ctx.week.lessons.filter((l) => l.schoolId === id && l.date === d && needsTeacher(l)).length,
           issues: mine.filter((i) => i.lesson.date === d),
         }))
-        return { id, name: ctx.schoolById.get(id)?.fullName ?? id, total, days, health: healthOf(mine) }
+        const school = ctx.schoolById.get(id)
+        const score = issueScore(mine)
+        return { id, name: school?.fullName ?? id, total, days, health: healthOf(mine), urgent: score.urgent, notes: mine.length - score.urgent, rank: score.rank,
+          ward: school ? wardOf(school) : '—', region: school?.region?.trim() || '—' }
       })
-  }, [ctx, issues, dates])
+    const text = (a: string, b: string) => a.localeCompare(b, 'vi')
+    const compare: Record<SortKey, (a: (typeof list)[number], b: (typeof list)[number]) => number> = {
+      load: (a, b) => a.total - b.total,
+      errors: (a, b) => a.rank - b.rank,
+      ward: (a, b) => text(a.ward, b.ward),
+      region: (a, b) => text(a.region, b.region),
+      name: (a, b) => text(a.name, b.name),
+    }
+    // Trong cùng nhóm luôn đưa trường đông ca lên trước, rồi theo tên.
+    return list.sort((a, b) => (sort.desc ? -1 : 1) * compare[sort.key](a, b) || b.total - a.total || text(a.name, b.name))
+  }, [ctx, issues, dates, sort])
   const usedDays = dates.map((_, i) => rows.some((r) => r.days[i].count > 0))
   const summary = { critical: 0, warning: 0, ok: 0 }
   for (const r of rows) summary[r.health]++
@@ -123,26 +156,39 @@ export function BoardPage() {
 
       <Card
         title="Trạng thái theo trường"
-        actions={<span className="flex items-center gap-1.5 text-xs" data-testid="health-summary">
-          <Badge tone="red"><AlertOctagon size={10} />{summary.critical} trường có lỗi</Badge>
-          <Badge tone="amber"><AlertTriangle size={10} />{summary.warning} không kịp</Badge>
-          <Badge tone="green"><Check size={10} />{summary.ok} ổn</Badge>
-        </span>}
+        actions={<>
+          <span className="flex items-center gap-1.5 text-xs" data-testid="health-summary">
+            <Badge tone="red"><AlertOctagon size={10} />{summary.critical} trường có lỗi</Badge>
+            <Badge tone="amber"><AlertTriangle size={10} />{summary.warning} không kịp</Badge>
+            <Badge tone="green"><Check size={10} />{summary.ok} ổn</Badge>
+          </span>
+          <label className="flex items-center gap-1.5 text-xs text-slate-500">Sắp xếp theo
+            <select aria-label="Sắp xếp theo" value={sort.key} onChange={(e) => { const key = e.target.value as SortKey; setSort({ key, desc: DEFAULT_DESC[key] }) }}>
+              {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => <option key={k} value={k}>{SORT_LABEL[k]}</option>)}
+            </select>
+          </label>
+        </>}
       >
         <div className="overflow-x-auto">
           <table className="w-full" data-testid="health-table">
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
-                <th className="px-4 py-2 font-medium">Trường</th>
-                <th className="px-2 py-2 text-right font-medium">Tổng ca</th>
-                {dates.map((d, i) => usedDays[i] && <th key={d} className="px-1 py-2 text-center font-medium">{DAY_LABELS[i]} <span className="font-normal text-slate-400">{shortDate(d)}</span></th>)}
+                <SortHeader k="name" sort={sort} onSort={onSort}>Trường</SortHeader>
+                <SortHeader k="ward" sort={sort} onSort={onSort}>Phường/xã</SortHeader>
+                <SortHeader k="region" sort={sort} onSort={onSort}>Khu vực</SortHeader>
+                <SortHeader k="load" sort={sort} onSort={onSort} align="right">Tổng ca</SortHeader>
+                <SortHeader k="errors" sort={sort} onSort={onSort} align="right">Lỗi</SortHeader>
+                {dates.map((d, i) => usedDays[i] && <th key={d} className="px-1 py-2 text-center font-medium">{DAY_LABELS[i]}<div className="font-normal text-slate-400">{shortDate(d)}</div></th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rows.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50">
-                  <td className="max-w-[320px] truncate px-4 py-1.5"><Link className="font-medium hover:text-emerald-700 hover:underline" to={`/schools/${r.id}`}>{r.name}</Link></td>
+                  <td className="max-w-[280px] truncate px-4 py-1.5"><Link className="font-medium hover:text-emerald-700 hover:underline" to={`/schools/${r.id}`}>{r.name}</Link></td>
+                  <td className="max-w-[120px] truncate px-2 py-1.5 text-slate-600" title={r.ward}>{r.ward}</td>
+                  <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">{r.region}</td>
                   <td className="tnum px-2 py-1.5 text-right text-slate-600">{r.total}</td>
+                  <td className="tnum px-2 py-1.5 text-right" title={`${r.urgent} lỗi cần xử lý, ${r.notes} ghi chú`}>{r.urgent > 0 ? <span className="font-semibold text-red-700">{r.urgent}</span> : <span className="text-slate-400">0</span>}</td>
                   {r.days.map((c, i) => usedDays[i] && (
                     <td key={c.date} className="px-1 py-1 text-center">
                       {c.count > 0 && <HealthCell schoolId={r.id} schoolName={r.name} date={c.date} count={c.count} issues={c.issues} />}
@@ -158,7 +204,7 @@ export function BoardPage() {
           <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-5 items-center justify-center rounded bg-amber-100 text-amber-900"><AlertTriangle size={10} /></span>Không kịp di chuyển</span>
           <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-5 items-center justify-center rounded bg-emerald-50 text-emerald-800"><Check size={10} /></span>Ổn</span>
           <span className="inline-flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-sky-500" />Ổn, có ghi chú Refer hoặc nguyện vọng</span>
-          <span className="ml-auto text-slate-500">Rê chuột vào ô để xem tóm tắt, bấm để mở trường</span>
+          <span className="ml-auto text-slate-500">Bấm tiêu đề cột để sắp xếp · Rê chuột vào ô để xem tóm tắt</span>
         </div>
       </Card>
     </div>

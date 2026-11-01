@@ -271,7 +271,7 @@ export const useStore = create<State>()(
     },
     {
       name: 'gaia-scheduling',
-      version: 2,
+      version: 3,
       // Bản lưu cũ: giữ lịch và các chỉnh sửa của điều phối, nạp thêm địa chỉ, toạ độ, khu vực mới.
       migrate: (persisted) => {
         const p = persisted as Partial<State>
@@ -287,7 +287,7 @@ export const useStore = create<State>()(
           }),
           schools: seed.schools.map((x) => {
             const old = oldSchools.get(x.id)
-            return old ? { ...x, referredTeacherIds: old.referredTeacherIds, referSource: old.referSource, genderPreference: old.genderPreference } : x
+            return old ? { ...x, referredTeacherIds: old.referredTeacherIds, referSource: old.referSource, genderPreference: old.genderPreference, geo: old.geo?.source === 'manual' ? old.geo : x.geo } : x
           }),
         } as State
       },

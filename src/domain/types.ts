@@ -7,8 +7,8 @@ export type Gender = 'F' | 'M'
 export interface GeoPoint {
   lat: number
   lng: number
-  /** pluscode, street, manual: dùng được để đo. region: chỉ là tâm khu vực, chưa phải vị trí thật. */
-  source: 'pluscode' | 'street' | 'region' | 'manual'
+  /** pluscode, street, manual: dùng được để đo. region, ward: chỉ là tâm khu vực hoặc phường/xã. */
+  source: 'pluscode' | 'street' | 'region' | 'manual' | 'ward'
 }
 
 export interface Lesson {
@@ -77,9 +77,12 @@ export interface Teacher {
   subjects: string[]
   gender: Gender | null
   maxKm: number | null
-  /** Khu vực GV đăng ký dạy, viết hoa như cột KHU VỰC của data.xlsx. Rỗng = chưa khai báo. */
+  /** Khu vực GV mong muốn đi dạy, viết hoa như cột KHU VỰC của data.xlsx. Rỗng = chưa khai báo. */
   areas: string[]
   onlineOnly: boolean
+  /** Vị trí nhà: Plus Code, hoặc tâm phường/xã đọc từ địa chỉ. Chỉ có trong seed thật. */
+  homeGeo?: GeoPoint
+  homeArea?: string
   preferences: Preference[]
 }
 

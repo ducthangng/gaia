@@ -1,14 +1,11 @@
 import { AlertTriangle, FileDown, MapPin, Star, X } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
-import { NavLink, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { NavLink, useParams, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
-import { LessonChip } from '../components/LessonChip'
-import { SchoolAlerts } from '../components/SchoolAlerts'
-import { SchoolMapCard } from '../components/SchoolMapCard'
+import { MovementPanel, type MovementSelection } from '../components/MovementPanel'
+import { WeekTimeGrid } from '../components/WeekTimeGrid'
 import { Badge, Button, Card, Empty, PageHeader } from '../components/ui'
 import { coverage, schoolLoad, touchesSchool, type Issue } from '../domain/issues'
-import { byTime } from '../domain/route'
-import { dayLabel, weekDates } from '../domain/time'
 import { teacherLabel, type School } from '../domain/types'
 import { useWeekContext, useWeekIssues, type Ctx } from '../hooks'
 import { exportSchoolSchedule } from '../services/exports'
@@ -44,11 +41,19 @@ export function SchoolsPage() {
 }
 
 function SchoolDetail({ school: s, ctx, issues }: { school: School; ctx: Ctx; issues: Issue[] }) {
-  const [activeIssue, setActiveIssue] = useState<Issue | null>(null)
-  const mapRef = useRef<HTMLDivElement>(null)
+  const [params] = useSearchParams()
+  const [selection, setSelection] = useState<MovementSelection>(() => {
+    const lesson = ctx.week.lessons.find((l) => l.id === params.get('lesson'))
+    return { teacherId: lesson?.teacherId ?? '', lessonId: lesson?.id ?? '' }
+  })
+  const panelRef = useRef<HTMLDivElement>(null)
+  const scrollToMap = () => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  useEffect(() => {
+    if (params.get('lesson')) scrollToMap()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const updateSchool = useStore((st) => st.updateSchool)
   const lessons = ctx.week.lessons.filter((l) => l.schoolId === s.id)
-  const dates = weekDates(ctx.week.startDate).filter((d, i) => i < 5 || lessons.some((l) => l.date === d))
   const cov = coverage(lessons)
   const sameName = ctx.world.schools.filter((x) => x.id !== s.id && x.name && x.name === s.name)
   return (
@@ -70,34 +75,22 @@ function SchoolDetail({ school: s, ctx, issues }: { school: School; ctx: Ctx; is
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
           <div>
-            Trùng tên với {sameName.map((x) => x.fullName).join(', ')}. Workbook mới phân biệt bằng khu vực, nên cần nhập địa chỉ cụ thể:
+            Trùng tên với {sameName.map((x) => x.fullName).join(', ')}. Cần nhập địa chỉ cụ thể để phân biệt:
             <input aria-label="Địa chỉ trường" className="ml-2 w-80" placeholder="Địa chỉ cụ thể" onBlur={(e) => e.target.value && updateSchool(s.id, { address: e.target.value })} />
           </div>
         </div>
       )}
-      <SchoolAlerts issues={issues} schoolId={s.id} ctx={ctx} active={activeIssue} onShowOnMap={(i) => {
-        setActiveIssue(i)
-        mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }} />
-      <div ref={mapRef}><SchoolMapCard school={s} ctx={ctx} issues={issues} active={activeIssue} onSelect={setActiveIssue} /></div>
       <Card title="Lịch học trong tuần">
         {lessons.length === 0 ? <Empty>Tuần này trường chưa có ca nào.</Empty> : (
-          <div className="grid gap-px overflow-x-auto bg-slate-100" style={{ gridTemplateColumns: `repeat(${dates.length}, minmax(130px, 1fr))` }}>
-            {dates.map((d) => {
-              const day = lessons.filter((l) => l.date === d).sort(byTime)
-              return (
-                <div key={d} className="bg-white">
-                  <div className="sticky top-0 border-b border-slate-100 bg-white px-2 py-1.5 text-xs font-semibold text-slate-600">{dayLabel(d)}</div>
-                  <div className="space-y-1 p-1">
-                    {day.map((l) => <LessonChip key={l.id} lesson={l} ctx={ctx} show="teacher" />)}
-                    {!day.length && <div className="px-1 py-2 text-xs text-slate-300">Không có ca</div>}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          <WeekTimeGrid lessons={lessons} ctx={ctx} issues={issues} onShowOnMap={(l) => {
+            setSelection({ teacherId: l.teacherId ?? '', lessonId: l.id })
+            scrollToMap()
+          }} />
         )}
       </Card>
+      <div ref={panelRef} className="scroll-mt-2">
+        <MovementPanel school={s} ctx={ctx} issues={issues} selection={selection} onSelect={setSelection} />
+      </div>
       <ReferEditor school={s} ctx={ctx} />
     </div>
   )

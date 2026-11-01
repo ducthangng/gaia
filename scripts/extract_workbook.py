@@ -25,6 +25,7 @@ from openpyxl.utils import column_index_from_string
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from geo import decode_short_plus_code, haversine  # noqa: E402
+from places import place_in_address  # noqa: E402
 
 FILL_STATUS = {
     "FF000000": "sub", "FF980000": "sub", "FF4A86E8": "sub",
@@ -289,6 +290,9 @@ def join_data_file(path, schools, teachers, distances, offices):
         if not s.get("geo") and pts:
             s["geo"] = {"lat": round(statistics.mean(p[0] for p in pts), 5), "lng": round(statistics.mean(p[1] for p in pts), 5), "source": "region"}
 
+    place_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "place-geocache.json")
+    places = json.load(open(place_path, encoding="utf-8")) if os.path.exists(place_path) else {}
+
     for r in book["Sheet2"].iter_rows(min_row=2, values_only=True):
         code = clean(r[1])
         t = teachers.get(code)
@@ -297,9 +301,37 @@ def join_data_file(path, schools, teachers, distances, offices):
         addr, note, area = clean(r[3]), clean(r[4]), (clean(r[5]) or "").upper()
         if addr and not addr.upper().startswith("VP "):
             t["address"] = addr
+            # Vị trí nhà: Plus Code nếu có, không thì tâm phường/xã đọc được từ địa chỉ (chạy trên máy).
+            exact = decode_short_plus_code(addr)
+            place = place_in_address(addr)
+            if exact:
+                t["homeGeo"] = {"lat": exact[0], "lng": exact[1], "source": "pluscode"}
+            elif place in places:
+                t["homeGeo"] = {"lat": places[place]["lat"], "lng": places[place]["lng"], "source": "ward"}
+            if place:
+                t["homeArea"] = place
         t["areas"] = [a for a in AREAS if a in area]
         # Không lưu lý do cụ thể trong ghi chú, chỉ giữ thông tin cần cho xếp lịch.
         t["onlineOnly"] = "ONLINE" in (note or "").upper()
+
+
+def report_home_accuracy(teachers, schools, distances):
+    """So vị trí nhà với số km từ nhà Gaia đã ghi: đường bộ không thể ngắn hơn đường chim bay."""
+    by_id = {s["id"]: s for s in schools.values()}
+    pts, errs, impossible = [], [], []
+    for key, km in distances["home"].items():
+        tid, sid = key.split("|")
+        home, geo = teachers[tid].get("homeGeo"), (by_id.get(sid) or {}).get("geo")
+        if not home or not geo or geo["source"] == "region" or km < 3:
+            continue
+        d = haversine((home["lat"], home["lng"]), (geo["lat"], geo["lng"]))
+        pts.append(km / max(d, 0.5))
+        errs.append(abs(d * 1.3 - km))
+        if d > km + 5:
+            impossible.append((tid, sid, round(d, 1), km))
+    if errs:
+        print(f"  kiểm tra vị trí nhà: {len(errs)} cặp, sai số trung vị {statistics.median(errs):.1f} km, {sum(e <= 5 for e in errs)} cặp lệch <= 5 km, {len(impossible)} cặp vô lý")
+        print("  vô lý:", [(t, s[:18], d, k) for t, s, d, k in impossible][:12])
 
 
 def main():
@@ -395,6 +427,7 @@ def main():
         t.update(areas=[], onlineOnly=False)
     if args.data:
         join_data_file(args.data, schools, teachers, distances, offices)
+        report_home_accuracy(teachers, schools, distances)
 
     # Gộp leave theo (GV, ngày, buổi), bỏ trùng.
     seen, leave_list = set(), []
@@ -421,6 +454,8 @@ def main():
     if args.anonymize:
         for t in out["teachers"]:
             t.update(name=f"Giáo viên {t['id']}", phone=None, address=None)
+            t.pop("homeGeo", None)
+            t.pop("homeArea", None)
         for s in out["schools"]:
             s["consultant"] = None
         for lv in out["leaves"]:
@@ -437,6 +472,7 @@ def main():
         print(" ", w["label"], w["status"], len(w["lessons"]), collections.Counter(l["status"] for l in w["lessons"]))
     src = collections.Counter((s.get("geo") or {}).get("source", "none") for s in out["schools"])
     print("  toạ độ trường:", dict(src), "| có địa chỉ:", sum(1 for s in out["schools"] if s["address"]))
+    print("  GV có vị trí nhà:", collections.Counter((t.get("homeGeo") or {}).get("source", "none") for t in out["teachers"] if t["active"]))
     print("  GV có khu vực:", sum(1 for t in out["teachers"] if t["areas"]), "| chỉ online:", sum(1 for t in out["teachers"] if t["onlineOnly"]))
     print("  Refer:", sum(len(s["referredTeacherIds"]) for s in out["schools"]), "| km:", {k: len(v) for k, v in distances.items()})
 

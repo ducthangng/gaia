@@ -25,7 +25,8 @@ Chỉnh sửa trên giao diện được lưu ở `localStorage` của trình du
 ### Toạ độ và bản đồ
 
 - Plus Code được giải ngay trên máy (`scripts/geo.py`), không gọi dịch vụ ngoài.
-- Địa chỉ trường dạng chữ tra qua Nominatim (OpenStreetMap). Địa chỉ nhà giáo viên không bao giờ được gửi đi.
+- Địa chỉ trường dạng chữ tra qua Nominatim (OpenStreetMap). Địa chỉ nhà giáo viên không bao giờ được gửi tự động.
+- Vị trí nhà giáo viên: Plus Code nếu có, không thì tâm phường/xã đọc từ địa chỉ ngay trên máy (`scripts/places.py`). `scripts/geocode_places.py` chỉ tra các tên phường trong danh sách cố định. Chặng từ nhà vẽ bằng đường thẳng và không gửi cho máy chủ tìm đường; link Google Maps chỉ gửi địa chỉ khi người dùng bấm.
 - Điểm tra được bị loại nếu đường chim bay dài hơn số km đã ghi; trường chưa có vị trí tin cậy đặt ở tâm khu vực và ghi rõ "gần đúng".
 - Bản đồ dùng Leaflet với tile OpenStreetMap, đường đi lấy từ máy chủ demo của OSRM, cả hai đều không cần API key. Khi dùng thật nhiều nên chuyển sang nhà cung cấp có cam kết dịch vụ.
 - Link "Chỉ đường Google Maps" không cần API key. Nhúng hẳn Google Maps vào trang thì cần API key và tài khoản thanh toán.

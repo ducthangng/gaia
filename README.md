@@ -18,7 +18,7 @@ python3 scripts/extract_workbook.py "<lịch>.xlsx" src/data/seed.json --data da
 ```
 
 - `seed.local.json`: có SĐT và địa chỉ nhà của giáo viên. Chỉ nạp khi chạy `dev`, không commit, không deploy.
-- `seed.json`: đã ẩn danh. Là dữ liệu của mọi bản build, an toàn cho Vercel.
+- `seed.json`: dữ liệu của mọi bản build. Có tên giáo viên; không có SĐT, địa chỉ nhà, vị trí nhà, ghi chú và người phụ trách. File này được commit, nên tên giáo viên sẽ công khai nếu repo công khai.
 
 Chỉnh sửa trên giao diện được lưu ở `localStorage` của trình duyệt cho tới khi có backend.
 

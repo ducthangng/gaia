@@ -6,6 +6,7 @@ import { dayIndex, DAY_LABELS, money } from '../domain/time'
 import { teacherLabel, type Lesson } from '../domain/types'
 import type { Ctx } from '../hooks'
 import { useStore } from '../store'
+import { EntityAnchor } from './EntityLink'
 import { Badge, Button, Card, toast } from './ui'
 
 const GOAL: Record<CoverGoal, { label: string; tone: 'blue' | 'green' | 'violet' }> = {
@@ -24,11 +25,11 @@ function PlanCard({ plan: p, ctx, title }: { plan: CoverPlan; ctx: Ctx; title?: 
   const name = (id: string) => { const t = ctx.teacherById.get(id); return t ? teacherLabel(t) : id }
   return (
     <div className="rounded-md border border-slate-200" data-testid="cover-plan" data-goals={p.goals.join(',')} data-teachers={p.shares.length} data-cost={p.extraCost} data-uncovered={p.uncovered.length}>
-      <div className="flex flex-wrap items-start gap-3 px-3 py-2.5">
+      <div className="flex flex-wrap items-start gap-3 px-4 py-3">
         <div className="min-w-0 flex-1 basis-72">
           <div className="flex flex-wrap items-center gap-1.5">
             {p.goals.map((g) => <Badge key={g} tone={GOAL[g].tone}>{GOAL[g].label}</Badge>)}
-            {title && <span className="font-semibold">{title}</span>}
+            {title && <span className="font-semibold"><EntityAnchor kind="teacher" id={p.shares[0].teacherId}>{title}</EntityAnchor></span>}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
             {!title && <span className="inline-flex items-center gap-1 font-semibold">{p.shares.length === 1 ? <UserRound size={13} /> : <UsersRound size={13} />}{p.shares.length} giáo viên</span>}
@@ -49,8 +50,8 @@ function PlanCard({ plan: p, ctx, title }: { plan: CoverPlan; ctx: Ctx; title?: 
       {open && (
         <ul className="divide-y divide-slate-100 border-t border-slate-100 text-xs">
           {p.shares.map((s) => (
-            <li key={s.teacherId} className="grid gap-x-3 px-3 py-1.5 sm:grid-cols-[minmax(0,240px)_90px_minmax(0,1fr)]">
-              <span className="font-medium">{name(s.teacherId)}</span>
+            <li key={s.teacherId} className="grid gap-x-3 px-4 py-2 sm:grid-cols-[minmax(0,240px)_90px_minmax(0,1fr)]">
+              <span className="font-medium"><EntityAnchor kind="teacher" id={s.teacherId}>{name(s.teacherId)}</EntityAnchor></span>
               <span className="tnum text-slate-600">{signed(s.extraCost)}</span>
               <span className="text-slate-600">{s.lessons.map(when).join(', ')}</span>
             </li>
@@ -78,17 +79,17 @@ export function CoverSuggestions({ schoolId, ctx }: { schoolId: string; ctx: Ctx
   }
   return (
     <Card title={title}>
-      <div className="space-y-4 p-4" data-testid="cover-suggestions">
+      <div className="space-y-5 p-5" data-testid="cover-suggestions">
         <section>
           <h3 className="mb-1.5 text-xs font-semibold text-slate-500">PHƯƠNG ÁN THEO MỤC TIÊU</h3>
-          <div className="space-y-2">{options.plans.map((p) => <PlanCard key={p.id} plan={p} ctx={ctx} />)}</div>
+          <div className="space-y-3">{options.plans.map((p) => <PlanCard key={p.id} plan={p} ctx={ctx} />)}</div>
         </section>
         <section>
           <button className="mb-1.5 flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800" aria-expanded={showSolo} onClick={() => setShowSolo((x) => !x)}>
             <ChevronDown size={13} className={clsx('transition-transform', showSolo && 'rotate-180')} />GIÁO VIÊN TRỐNG NHẬN ĐƯỢC TẤT CẢ ({options.soloPlans.length})
           </button>
           {showSolo && (options.soloPlans.length ? (
-            <div className="space-y-2" data-testid="cover-solo">{options.soloPlans.map((p) => <PlanCard key={p.id} plan={p} ctx={ctx} title={teacherLabel(ctx.teacherById.get(p.shares[0].teacherId)!)} />)}</div>
+            <div className="space-y-3" data-testid="cover-solo">{options.soloPlans.map((p) => <PlanCard key={p.id} plan={p} ctx={ctx} title={teacherLabel(ctx.teacherById.get(p.shares[0].teacherId)!)} />)}</div>
           ) : <p className="text-slate-600" data-testid="cover-no-solo">Không có giáo viên nào một mình nhận hết được, thường do có ca trùng giờ hoặc người khác đang bận. Xem các phương án nhiều người ở trên.</p>)}
         </section>
         <p className="text-xs text-slate-500">Mọi phương án đều đã loại trùng lịch, nghỉ phép và chặng không kịp. Số tiền là phần tăng thêm so với lịch hiện tại, có thể dùng km ước tính. "Ít nhất" và "tiết kiệm nhất" là kết quả tốt nhất hệ thống tìm được.</p>

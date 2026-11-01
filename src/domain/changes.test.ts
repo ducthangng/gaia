@@ -4,8 +4,11 @@ import { blockers, leaveCovers, preferenceViolations } from './constraints'
 import { buildContext, type World } from './context'
 import { decodePlusCode, googleDirectionsUrl, haversineKm, isPrecise, parseLatLng, roadKm, wardOf } from './geo'
 import { movementTo } from './movement'
-import { applyChanges, MAX_LOAD_SHIFT, suggestOptimizations } from './optimize'
+import { applyChanges, changesImpact, changeState, MAX_LOAD_SHIFT, pendingChanges, planLessonMove, suggestOptimizations } from './optimize'
+import { buildEntityIndex, tokenizeEntities } from './entity-text'
 import { coverOptions, openLessons } from './cover-plan'
+import { buildWeekSheet, creditsAt, lessonFill, sheetToGrid, weekSheetName, FILLS } from './week-sheet'
+import { parseWeekGrid } from './sheet-grid'
 import { explainLessonChange, tierText } from './cost-explain'
 import { dataDiff } from './data-diff'
 import { createSchool, createTeacher, emptyProfile, nextTeacherId, schoolDraftErrors, schoolFullName, teacherIdError } from './create-records'
@@ -235,7 +238,8 @@ describe('dữ liệu', () => {
     const active = seed.teachers.filter((t) => t.active)
     expect(active.filter((t) => t.areas.length).length).toBeGreaterThanOrEqual(active.length - 1)
   })
-  it('địa chỉ và vị trí nhà giáo viên không có trong seed ẩn danh', () => {
+  it('bản demo có tên giáo viên nhưng không có SĐT, địa chỉ, vị trí nhà', () => {
+    expect(seed.teachers.filter((t) => t.active).every((t) => !t.name.startsWith('Giáo viên VT'))).toBe(true)
     expect(seed.teachers.every((t) => t.address === null && t.phone === null && !t.homeGeo && !t.homeArea)).toBe(true)
     expect(JSON.stringify(seed).toUpperCase()).not.toContain('THAI SẢN')
   })
@@ -450,8 +454,9 @@ describe('đề xuất tối ưu trên dữ liệu thật', () => {
   const list = suggestOptimizations(ctx)
   const ms = Date.now() - t0
   const realCost = (lessons: Lesson[]) => {
-    const c = buildContext({ ...week, lessons }, world)
-    return world.teachers.reduce((sum, t) => sum + weekDatesOf(week.startDate).reduce((x, d) => x + deriveRoute(t, d, c.dayLessons.get(`${t.id}|${d}`) ?? [], week.id, [], c).cost, 0), 0)
+    const w = { ...week, lessons }
+    const c = buildContext(w, world)
+    return world.teachers.reduce((sum, t) => sum + weekDatesOf(week.startDate).reduce((x, d) => x + routeForWeek(w, t, d, c).cost, 0), 0)
   }
   it('chạy đủ nhanh và có đề xuất', () => {
     expect(list.length).toBeGreaterThan(0)
@@ -858,5 +863,175 @@ describe('gợi ý xếp ca trống của trường', () => {
     const t0 = Date.now()
     coverOptions(schoolId, c)
     expect(Date.now() - t0).toBeLessThan(5000)
+  })
+})
+
+describe('đổi từng ca trong đề xuất tối ưu', () => {
+  const ctx = buildContext(week, world)
+  const list = suggestOptimizations(ctx)
+  const costAll = (lessons: Lesson[]) => {
+    const w = { ...week, lessons }
+    const c = buildContext(w, world)
+    return world.teachers.reduce((sum, t) => sum + weekDatesOf(week.startDate).reduce((x, d) => x + routeForWeek(w, t, d, c).cost, 0), 0)
+  }
+  const base = costAll(week.lessons)
+  const urgentKinds = ['overlap', 'travel', 'leave', 'uncovered']
+  const swap = list.find((s) => s.title.startsWith('Đổi chéo'))
+  const multi = list.filter((s) => s.changes.length > 1)
+
+  it('số tiền của từng ca khớp đúng bảng chi phí khi đổi riêng ca đó', () => {
+    for (const s of multi.slice(0, 6)) {
+      for (const c of s.changes.slice(0, 4)) {
+        const m = planLessonMove(s, c.lessonId, ctx)
+        expect(base - costAll(applyChanges(week.lessons, m.changes)), s.title).toBe(m.saving)
+      }
+    }
+  })
+  it('đổi được thì không phát sinh trùng lịch, không kịp', () => {
+    for (const s of multi.slice(0, 6)) {
+      for (const c of s.changes.slice(0, 4)) {
+        const m = planLessonMove(s, c.lessonId, ctx)
+        if (!m.ok) continue
+        const after = weekIssues(buildContext({ ...week, lessons: applyChanges(week.lessons, m.changes) }, world))
+        expect(newIssues(weekIssues(ctx), after).filter((i) => urgentKinds.includes(i.kind)), s.title).toEqual([])
+      }
+    }
+  })
+  it('ca được chọn luôn nằm trong nhóm đổi, nhóm chỉ gồm ca của đề xuất', () => {
+    for (const s of multi.slice(0, 6)) {
+      const c = s.changes[0]
+      const m = planLessonMove(s, c.lessonId, ctx)
+      expect(m.changes.some((x) => x.lessonId === c.lessonId)).toBe(true)
+      for (const x of m.changes) expect(s.changes).toContainEqual(x)
+    }
+  })
+  it('đổi chéo trùng giờ thì gộp thành cặp thay vì tạo trùng lịch', () => {
+    const [a, b2] = seed.schools.filter((s) => isPrecise(s.geo))
+    const T = teacher({ id: 'T1', name: 'T1' })
+    const U = teacher({ id: 'U1', name: 'U1' })
+    const x = lesson({ id: 'x', teacherId: 'T1', schoolId: a.id, className: '1A' })
+    const y = lesson({ id: 'y', teacherId: 'U1', schoolId: b2.id, className: '1B' })
+    const w2 = { ...week, lessons: [x, y], legs: [] }
+    const c = buildContext(w2, { ...world, teachers: [...world.teachers, T, U] })
+    const s = { id: 's', kind: 'cost' as const, title: '', reason: '', scope: 'day' as const, changes: [{ lessonId: 'x', teacherId: 'U1' }, { lessonId: 'y', teacherId: 'T1' }], lessons: [x, y], teacherIds: ['T1', 'U1'], saving: 0, kmSaved: 0, prefGain: 0, referLoss: 0, estimatedKm: false, load: [], value: 0 }
+    const m = planLessonMove(s, 'x', c)
+    expect(m.ok).toBe(true)
+    expect(m.changes.map((q) => q.lessonId).sort()).toEqual(['x', 'y'])
+  })
+  it('theo dõi trạng thái từng ca khi lịch thay đổi dần', () => {
+    const s = multi[0]
+    const [c1, c2] = s.changes
+    const w1 = { ...week, lessons: applyChanges(week.lessons, [c1]) }
+    const c = buildContext(w1, world)
+    expect(changeState(s, c1, c)).toBe('done')
+    expect(changeState(s, c2, c)).toBe('pending')
+    expect(pendingChanges(s, c).map((x) => x.lessonId)).not.toContain(c1.lessonId)
+    const other = ctx.world.teachers.find((t) => t.active && t.id !== c2.teacherId && !s.teacherIds.includes(t.id))!
+    const w2 = { ...week, lessons: applyChanges(week.lessons, [{ lessonId: c2.lessonId, teacherId: other.id }]) }
+    expect(changeState(s, c2, buildContext(w2, world))).toBe('overridden')
+    const gone = { ...week, lessons: week.lessons.filter((l) => l.id !== c2.lessonId) }
+    expect(changeState(s, c2, buildContext(gone, world))).toBe('overridden')
+  })
+  it('đổi hết từng ca cho kết quả bằng áp dụng cả đề xuất', () => {
+    const s = swap ?? multi[0]
+    let lessons = week.lessons
+    for (const c of s.changes) lessons = applyChanges(lessons, [c])
+    expect(base - costAll(lessons)).toBe(s.saving)
+    expect(changesImpact(s.changes, ctx).saving).toBe(s.saving)
+  })
+  it('ca không còn chờ đổi thì không đổi được', () => {
+    const s = multi[0]
+    const c = buildContext({ ...week, lessons: applyChanges(week.lessons, [s.changes[0]]) }, world)
+    expect(planLessonMove(s, s.changes[0].lessonId, c)).toMatchObject({ ok: false, changes: [] })
+  })
+})
+
+describe('xuất lịch tuần theo mẫu Gaia', () => {
+  it('đặt tên sheet đúng cách Gaia đang đặt', () => {
+    expect(['2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19', '2026-10-26', '2026-11-02'].map(weekSheetName)).toEqual([
+      'Thang 10 - Tuan 1', 'Thang 10 - Tuan 2', 'Thang 10 - Tuan 3', 'Thang 10 - Tuan 4', 'Thang 10 - Tuan 5', 'Thang 11 - Tuan 1',
+    ])
+  })
+  it('màu theo đúng bảng quy định', () => {
+    expect(lessonFill(lesson({ subject: 'STEM' }))).toBe(FILLS.stem)
+    expect(lessonFill(lesson({ subject: 'CDS' }))).toBe(FILLS.cds)
+    expect(lessonFill(lesson({ subject: 'KNS' }))).toBeNull()
+    expect(lessonFill(lesson({ subject: 'STEM', type: 'substitute' }))).toBe(FILLS.subStem)
+    expect(lessonFill(lesson({ subject: 'CDS', type: 'makeup' }))).toBe(FILLS.makeupCds)
+    expect(lessonFill(lesson({ status: 'school_off' }))).toBe(FILLS.schoolOff)
+    expect(lessonFill(lesson({ status: 'needs_cover' }))).toBe(FILLS.leave)
+  })
+  it('tiết quy đổi đúng logic công thức gốc', () => {
+    expect(creditsAt('S', null)).toEqual({ kns: '', stem: 1, cds: '' })
+    expect(creditsAt(null, 'BCTH').kns).toBe(3)
+    expect(creditsAt('NB', null).cds).toBe('NB')
+    expect(creditsAt(null, 'CM').cds).toBe(0.001)
+  })
+  for (const w of seed.weeks) {
+    it(`đủ ca, đúng ô, đọc lại được: tuần ${w.id}`, () => {
+      const ctx = buildContext(w, world)
+      const sheet = buildWeekSheet(ctx)
+      expect(sheet.unplaced).toEqual([])
+      const shown = w.lessons.filter((l) => (l.teacherId ?? l.originalTeacherId))
+      const back = parseWeekGrid(sheetToGrid(sheet), w.startDate)
+      expect(back.lessons.length).toBe(shown.length)
+      const key = (x: { date: string; className: string | null; start: string | null }) => `${x.date}|${x.className}|${x.start}`
+      expect(back.lessons.map(key).sort()).toEqual(shown.map(key).sort())
+      const blocks = new Map(sheet.blocks.map((b) => [b.id, b]))
+      for (const l of shown) expect(blocks.has(l.teacherId ?? l.originalTeacherId!)).toBe(true)
+    })
+  }
+  it('tổng tiền các chặng khớp cột CTP của workbook ở tuần đã chốt', () => {
+    for (const w of seed.weeks.filter((x) => x.status === 'archived' && x.reported)) {
+      const sheet = buildWeekSheet(buildContext(w, world))
+      for (const b of sheet.blocks) {
+        const r = w.reported![b.id]
+        if (!r) continue
+        const total = b.legs.filter((l) => l.col >= sheet.costFromCol).reduce((s, l) => s + l.cost, 0)
+        expect(total, `${w.id} ${b.id}`).toBe(r.cost)
+      }
+    }
+  })
+  it('ca sửa giờ trùng tiết vẫn có trong file; ca chưa từng có giáo viên nằm ở khối riêng', () => {
+    const [a] = seed.schools
+    const T = teacher({ id: 'TT', name: 'TT' })
+    const parallel = Array.from({ length: 3 }, (_, i) => lesson({ id: `p${i}`, teacherId: 'TT', schoolId: a.id, className: `L${i}`, period: 1 }))
+    const orphan = lesson({ id: 'o', teacherId: null, status: 'needs_cover', schoolId: a.id, className: 'Moi' })
+    const sheet = buildWeekSheet(buildContext({ ...week, lessons: [...parallel, orphan], legs: [] }, { ...world, teachers: [...world.teachers, T] }))
+    expect(sheet.unplaced).toEqual([])
+    const own = sheet.blocks.find((b) => b.id === 'TT')!
+    expect([...own.cells.values()].map((c) => c.className).sort()).toEqual(['L0', 'L1', 'L2'])
+    expect(sheet.blocks.at(-1)).toMatchObject({ id: 'CHUA-XEP', name: 'CHƯA CÓ GIÁO VIÊN' })
+  })
+})
+
+describe('nhận ra tên giáo viên và trường trong văn bản', () => {
+  const teachers = [{ id: 'VT001', name: 'NGUYỄN THỊ A' }, { id: 'VT002', name: 'TRẦN BÌNH' }, { id: 'VT003', name: 'TRẦN BÌNH' }, { id: 'GV001', name: 'LÂM TÀI' }]
+  const schools = [
+    { id: 'qt', fullName: 'TH Quang Trung - Phú Mỹ', name: 'TH Quang Trung' },
+    { id: 'k1', fullName: 'TH Minh Khai - Phú Mỹ', name: 'TH Minh Khai' },
+    { id: 'k2', fullName: 'TH Minh Khai - Châu Đức', name: 'TH Minh Khai' },
+  ]
+  const idx = buildEntityIndex(teachers, schools)
+  const links = (t: string) => tokenizeEntities(t, idx).filter((x) => x.kind !== 'text').map((x) => `${x.kind}:${x.id}:${x.text}`)
+  it('nhận tên đầy đủ, mã + tên, mã riêng', () => {
+    expect(links('VT001 · NGUYỄN THỊ A từ TH Quang Trung - Phú Mỹ sang')).toEqual(['teacher:VT001:VT001 · NGUYỄN THỊ A', 'school:qt:TH Quang Trung - Phú Mỹ'])
+    expect(links('NGUYỄN THỊ A đang rảnh')).toEqual(['teacher:VT001:NGUYỄN THỊ A'])
+    expect(links('VT001: 23 → 22 ca')).toEqual(['teacher:VT001:VT001'])
+  })
+  it('tên ngắn của trường dùng được khi duy nhất; trùng tên thì không đoán', () => {
+    expect(links('Ngày đó còn ca tại TH Quang Trung nên')).toEqual(['school:qt:TH Quang Trung'])
+    expect(links('Ca tại TH Minh Khai')).toEqual([])
+    expect(links('Ca tại TH Minh Khai - Châu Đức')).toEqual(['school:k2:TH Minh Khai - Châu Đức'])
+  })
+  it('giáo viên trùng tên thì không đoán, nhưng có mã thì vẫn đúng người', () => {
+    expect(links('TRẦN BÌNH đang rảnh')).toEqual([])
+    expect(links('VT003 · TRẦN BÌNH đang rảnh')).toEqual(['teacher:VT003:VT003 · TRẦN BÌNH'])
+  })
+  it('không bắt nhầm giữa từ, giữ nguyên toàn bộ văn bản', () => {
+    expect(links('XVT0011 và AVT001')).toEqual([])
+    const text = 'Từ VT001 sang TH Quang Trung, xong.'
+    expect(tokenizeEntities(text, idx).map((x) => x.text).join('')).toBe(text)
+    expect(tokenizeEntities('', idx)).toEqual([])
   })
 })

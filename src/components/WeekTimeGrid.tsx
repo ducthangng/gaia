@@ -10,9 +10,9 @@ import { LessonChip } from './LessonChip'
 import { openLessonEditor } from './LessonEditor'
 import { Button } from './ui'
 
-const ROW_PX = 29 // Một ô 15 phút: ca 35 phút cao khoảng 67px, đủ 4 dòng chữ
-const GAP_PX = 24
-const LANE_MIN_PX = 142
+const ROW_PX = 33 // Một ô 15 phút: ca 35 phút cao khoảng 77px, đủ 4 dòng chữ
+const GAP_PX = 28
+const LANE_MIN_PX = 156
 const EMPTY_DAY_PX = 70
 const TIME_COL_PX = 68
 const SESSION_STRIP_PX = 16
@@ -85,7 +85,7 @@ export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap }: { 
 
   return (
     <div ref={box}>
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-4 py-2" role="group" aria-label="Chọn ngày xem">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3" role="group" aria-label="Chọn ngày xem">
         {withLessons.map((d) => (
           <button key={d} aria-pressed={view === d} onClick={() => setChoice(d)} className={pill(view === d)}>
             {DAY_LABELS[dayIndex(d)]} {shortDate(d)} <span className="opacity-70">· {countOn(d)} ca</span>
@@ -100,7 +100,7 @@ export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap }: { 
           </> : <span className="text-xs text-slate-500">Tuần đã lưu trữ, chỉ xem</span>}
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-100 px-4 py-1.5 text-xs text-slate-600" data-testid="grid-legend">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-slate-100 px-5 py-3 text-xs text-slate-600" data-testid="grid-legend">
         <span className="font-medium text-slate-500">Chú thích:</span>
         {LEGEND.map((x) => (
           <span key={x.label} className="inline-flex items-center gap-1.5"><span className={clsx('inline-block h-3 w-4 rounded-sm border', x.swatch)} />{x.label}</span>
@@ -108,16 +108,16 @@ export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap }: { 
       </div>
       <div className="max-h-[78vh] overflow-auto" data-testid="time-grid">
         <div className="grid" style={{ gridTemplateColumns: columns, minWidth: 'max-content', width: '100%' }}>
-          <div className="sticky left-0 top-0 z-30 border-b border-r border-slate-200 bg-slate-100 py-1.5 text-center text-xs font-semibold text-slate-600">Giờ</div>
+          <div className="sticky left-0 top-0 z-30 border-b border-r border-slate-200 bg-slate-100 py-2.5 text-center text-xs font-semibold text-slate-600">Giờ</div>
           {days.map((d) => (
-            <div key={d.date} className="sticky top-0 z-20 border-b border-r border-slate-200 bg-slate-100 px-1 py-1.5 text-center text-xs font-semibold text-slate-700">{dayLabel(d.date)}</div>
+            <div key={d.date} className="sticky top-0 z-20 border-b border-r border-slate-200 bg-slate-100 px-1 py-2.5 text-center text-xs font-semibold text-slate-700">{dayLabel(d.date)}</div>
           ))}
           {hasUntimed && <>
             <div className="sticky left-0 z-10 border-b border-r border-slate-200 bg-white px-1 py-1 text-center text-[11px] leading-tight text-slate-500">Chưa rõ giờ</div>
             {days.map((d) => (
               <div key={d.date} className="grid content-start gap-1 border-b border-r border-slate-200 bg-white p-1" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${LANE_MIN_PX - 8}px, 1fr))` }} data-testid="untimed-cell">
                 {d.untimed.map((l) => (
-                  <div key={l.id} className="min-h-[68px]" data-testid="lesson-slot">
+                  <div key={l.id} className="min-h-[76px]" data-testid="lesson-slot">
                     <LessonChip lesson={l} ctx={ctx} show="teacher" fill mark={marks.get(l.id)} onShowOnMap={onShowOnMap} />
                   </div>
                 ))}
@@ -154,7 +154,7 @@ export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap }: { 
                 const top = axisY(axis, p.startMin, ROW_PX, GAP_PX)
                 const bottom = axisY(axis, Math.max(p.endMin, p.startMin + MIN_VISUAL_MIN), ROW_PX, GAP_PX)
                 return (
-                  <div key={p.lesson.id} data-testid="lesson-slot" className="absolute p-px hover:z-10" style={{ top, height: bottom - top, left: `${(p.lane / d.lanes) * 100}%`, width: `${100 / d.lanes}%` }}>
+                  <div key={p.lesson.id} data-testid="lesson-slot" className="absolute p-0.5 hover:z-10" style={{ top, height: bottom - top, left: `${(p.lane / d.lanes) * 100}%`, width: `${100 / d.lanes}%` }}>
                     <LessonChip lesson={p.lesson} ctx={ctx} show="teacher" fill mark={marks.get(p.lesson.id)} onShowOnMap={onShowOnMap} />
                   </div>
                 )

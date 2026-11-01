@@ -71,10 +71,10 @@ export function DataPage() {
   ]
 
   return (
-    <div className="mx-auto max-w-[1000px] space-y-4">
+    <div className="mx-auto max-w-[1000px] space-y-6">
       <PageHeader title="Nguồn dữ liệu" subtitle="Nạp dữ liệu đầu vào từ Google Sheet. Giai đoạn frontend chỉ đọc từ Sheet, chưa ghi ngược lại." />
       <Card title={<span className="inline-flex items-center gap-1.5"><Link2 size={14} />Kết nối Google Sheet</span>} actions={<Badge tone="amber">Chỉ đọc</Badge>}>
-        <div className="space-y-3 p-4">
+        <div className="space-y-4 p-5">
           <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">Link Google Sheet (chia sẻ "Bất kỳ ai có liên kết đều xem được")</span>
             <input className="w-full" placeholder="https://docs.google.com/spreadsheets/d/…" value={url} onChange={(e) => setUrl(e.target.value)} />
           </label>
@@ -114,7 +114,7 @@ export function DataPage() {
       <Card title="Mức độ đầy đủ của dữ liệu">
         <ul className="divide-y divide-slate-100">
           {gaps.map((g) => (
-            <li key={g.label} className="flex items-center justify-between px-4 py-2">
+            <li key={g.label} className="flex items-center justify-between px-5 py-3">
               <span className="inline-flex items-center gap-2">{g.done === g.total ? <CheckCircle2 size={14} className="text-emerald-600" /> : <CircleAlert size={14} className="text-amber-600" />}{g.label}</span>
               <span className="tnum text-slate-600">{g.done}/{g.total}</span>
             </li>

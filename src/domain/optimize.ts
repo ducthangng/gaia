@@ -3,7 +3,7 @@ import { buildContext, type WeekContext } from './context'
 import { ISSUE_META, newIssues, weekIssues, type Issue } from './issues'
 import { reassign } from './lesson-edit'
 import { canTeach, rankCandidates } from './recommend'
-import { deriveRoute, isOnSite } from './route'
+import { deriveRoute, isOnSite, routeForWeek } from './route'
 import { weekDates } from './time'
 import { teacherLabel, TEACHING_CODES, type Lesson, type Teacher } from './types'
 
@@ -113,8 +113,10 @@ function evaluatePlan({ a, to, b }: Plan, ctx: WeekContext, dates: string[], loa
   const affected = dates.filter((d) => a.lessons.some((l) => l.date === d) || b?.lessons.some((l) => l.date === d))
   for (const t of [from, to]) {
     for (const d of affected) {
-      const before = deriveRoute(t, d, ctx.dayLessons.get(`${t.id}|${d}`) ?? [], ctx.week.id, [], ctx)
-      const next = deriveRoute(t, d, after(t, d), ctx.week.id, [], ctx)
+      // Cùng các chặng đã ghi như bảng chi phí, để số tiết kiệm khớp với số thấy được sau khi áp dụng.
+      const recorded = ctx.week.legs.filter((r) => r.teacherId === t.id && r.date === d)
+      const before = deriveRoute(t, d, ctx.dayLessons.get(`${t.id}|${d}`) ?? [], ctx.week.id, recorded, ctx)
+      const next = deriveRoute(t, d, after(t, d), ctx.week.id, recorded, ctx)
       saving += before.cost - next.cost
       kmSaved += before.totalKm - next.totalKm
       estimatedKm ||= next.hasEstimate
@@ -250,4 +252,75 @@ export function suggestOptimizations(ctx: WeekContext): Suggestion[] {
     out.push(s)
   }
   return out
+}
+
+export type ChangeState = 'pending' | 'done' | 'overridden'
+
+/** Trạng thái một ca của đề xuất so với lịch hiện tại: danh sách đề xuất đứng yên trong khi lịch thay đổi dần. */
+export function changeState(s: Suggestion, c: Change, ctx: WeekContext): ChangeState {
+  const now = ctx.week.lessons.find((l) => l.id === c.lessonId)
+  const planned = s.lessons.find((l) => l.id === c.lessonId)
+  if (!now || !planned) return 'overridden'
+  if (now.teacherId === c.teacherId) return 'done'
+  return now.teacherId === planned.teacherId && now.status === planned.status ? 'pending' : 'overridden'
+}
+
+export const pendingChanges = (s: Suggestion, ctx: WeekContext) => s.changes.filter((c) => changeState(s, c, ctx) === 'pending')
+
+export interface ChangesImpact {
+  saving: number
+  kmSaved: number
+  /** Trùng lịch, không kịp di chuyển... sẽ phát sinh thêm. */
+  newUrgent: Issue[]
+}
+
+/** Tác động thật của một nhóm thay đổi lên lịch hiện tại. */
+export function changesImpact(changes: Change[], ctx: WeekContext): ChangesImpact {
+  const week = { ...ctx.week, lessons: applyChanges(ctx.week.lessons, changes) }
+  const next = buildContext(week, ctx.world)
+  const moved = ctx.week.lessons.filter((l) => changes.some((c) => c.lessonId === l.id))
+  const pairs = new Set<string>()
+  for (const l of moved) {
+    if (l.teacherId) pairs.add(`${l.teacherId}|${l.date}`)
+    pairs.add(`${changes.find((c) => c.lessonId === l.id)!.teacherId}|${l.date}`)
+  }
+  let saving = 0
+  let kmSaved = 0
+  for (const key of pairs) {
+    const [id, date] = key.split('|')
+    const t = ctx.teacherById.get(id)
+    if (!t) continue
+    const a = routeForWeek(ctx.week, t, date, ctx)
+    const b = routeForWeek(week, t, date, next)
+    saving += a.cost - b.cost
+    kmSaved += a.totalKm - b.totalKm
+  }
+  return { saving, kmSaved, newUrgent: urgent(newIssues(weekIssues(ctx), weekIssues(next))) }
+}
+
+export interface LessonMove extends ChangesImpact {
+  /** Các ca phải đổi cùng lúc, luôn có ca được chọn. */
+  changes: Change[]
+  /** Đổi được mà không phát sinh trùng lịch hay không kịp. */
+  ok: boolean
+}
+
+/**
+ * Đổi riêng một ca của đề xuất. Đổi chéo thường vướng vì người nhận đang dạy đúng giờ đó:
+ * khi ca vướng cũng nằm trong đề xuất thì gộp vào để đổi theo cặp, thay vì tạo ra trùng lịch.
+ */
+export function planLessonMove(s: Suggestion, lessonId: string, ctx: WeekContext): LessonMove {
+  const pending = pendingChanges(s, ctx)
+  const chosen = pending.find((c) => c.lessonId === lessonId)
+  if (!chosen) return { changes: [], ok: false, saving: 0, kmSaved: 0, newUrgent: [] }
+  let changes = [chosen]
+  for (let i = 0; i <= pending.length; i++) {
+    const impact = changesImpact(changes, ctx)
+    if (!impact.newUrgent.length) return { ...impact, changes, ok: true }
+    const ids = new Set(changes.map((c) => c.lessonId))
+    const more = pending.filter((c) => !ids.has(c.lessonId) && impact.newUrgent.some((u) => u.lesson.id === c.lessonId || u.related?.id === c.lessonId))
+    if (!more.length) return { ...impact, changes, ok: false }
+    changes = [...changes, ...more]
+  }
+  return { ...changesImpact(changes, ctx), changes, ok: false }
 }

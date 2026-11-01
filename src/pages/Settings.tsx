@@ -48,10 +48,10 @@ export function SettingsPage() {
   const update = useStore((s) => s.updateSettings)
   const totalWeight = Object.values(settings.weights).reduce((a, b) => a + b, 0)
   return (
-    <div className="mx-auto max-w-[1000px] space-y-4">
+    <div className="mx-auto max-w-[1000px] space-y-6">
       <PageHeader title="Cấu hình" subtitle="Thay đổi áp dụng ngay cho các tuần đang lập. Tuần đã lưu trữ giữ nguyên số liệu đã đóng băng." />
       <Card title="Cách tính chi phí di chuyển">
-        <div className="space-y-4 p-4">
+        <div className="space-y-5 p-5">
           <div className="grid gap-2 md:grid-cols-2">
             <label className="flex gap-2 rounded-md border border-slate-200 p-3">
               <input type="radio" name="policy" checked={settings.costPolicy === 'tier'} onChange={() => update({ costPolicy: 'tier' })} />
@@ -76,9 +76,9 @@ export function SettingsPage() {
           )}
         </div>
       </Card>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2">
         <Card title="Trọng số điểm phù hợp" actions={<span className="tnum text-xs text-slate-500">Tổng {totalWeight}, quy về thang 100</span>}>
-          <div className="space-y-3 p-4">
+          <div className="space-y-4 p-5">
             {WEIGHTS.map((w) => (
               <label key={w.key} className="block">
                 <span className="flex justify-between"><span>{w.label}</span><span className="tnum font-medium">{settings.weights[w.key]}</span></span>
@@ -89,7 +89,7 @@ export function SettingsPage() {
           </div>
         </Card>
         <Card title="Di chuyển giữa hai trường">
-          <div className="space-y-2 p-4">
+          <div className="space-y-3 p-5">
             <Num label="Tốc độ trung bình" unit="km/h" value={settings.travelSpeedKmh} onChange={(travelSpeedKmh) => update({ travelSpeedKmh: Math.max(1, travelSpeedKmh) })} />
             <Num label="Thời gian đệm" unit="phút" value={settings.travelBufferMin} onChange={(travelBufferMin) => update({ travelBufferMin })} />
             <p className="pt-1 text-xs text-slate-500">Hai ca khác trường cần cách nhau ít nhất: km ÷ tốc độ + thời gian đệm. Đây là giá trị tạm, cần Gaia xác nhận.</p>

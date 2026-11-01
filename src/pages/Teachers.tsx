@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { ArrowRight, CalendarOff, FileDown, Home, MapPin, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { NavLink, useParams, useSearchParams } from 'react-router-dom'
+import { EntityAnchor } from '../components/EntityLink'
 import { openNewTeacherDialog, openProfileDialog } from '../components/TeacherProfileDialog'
 import { TeachersTable } from '../components/InfoTables'
 import { ViewSwitch } from '../components/InlineCell'
@@ -32,14 +33,14 @@ function TeachersDetail() {
   const teacher = (id ? ctx.teacherById.get(id) : undefined) ?? list[0]
   const count = (tid: string) => ctx.week.lessons.filter((l) => l.teacherId === tid && l.status === 'assigned').length
   return (
-    <div className="mx-auto flex h-full max-w-[1500px] flex-col gap-2">
+    <div className="mx-auto flex h-full max-w-[1600px] flex-col gap-4">
     <div className="flex items-center justify-between gap-3"><ViewSwitch /><Button onClick={openNewTeacherDialog}><Plus size={14} />Thêm giáo viên</Button></div>
-    <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)] gap-4">
+    <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)] gap-6">
       <Card className="flex min-h-0 flex-col overflow-hidden">
-        <div className="border-b border-slate-100 p-2"><input aria-label="Tìm giáo viên" className="w-full" placeholder="Tìm giáo viên, khu vực…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-        <nav className="min-h-0 flex-1 overflow-y-auto p-1">
+        <div className="border-b border-slate-100 p-3"><input aria-label="Tìm giáo viên" className="w-full" placeholder="Tìm giáo viên, khu vực…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+        <nav className="min-h-0 flex-1 overflow-y-auto p-2">
           {list.map((t) => (
-            <NavLink key={t.id} to={`/teachers/${t.id}`} className={clsx('block rounded px-2 py-1.5', t.id === teacher?.id ? 'bg-emerald-50 text-emerald-900' : 'hover:bg-slate-100')}>
+            <NavLink key={t.id} to={`/teachers/${t.id}`} className={clsx('block rounded-md px-3 py-2.5', t.id === teacher?.id ? 'bg-emerald-50 text-emerald-900' : 'hover:bg-slate-100')}>
               <div className="flex items-center justify-between gap-2"><span className="truncate font-medium">{teacherLabel(t)}</span><span className="tnum text-xs text-slate-500">{count(t.id)}</span></div>
               <div className="truncate text-xs text-slate-500">{t.district ?? 'Chưa rõ khu vực'}</div>
             </NavLink>
@@ -62,7 +63,7 @@ function TeacherDetail({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
   const cost = routes.reduce((s, r) => s + r.cost, 0)
   const credits = tally(lessons)
   return (
-    <div className="min-w-0 space-y-4 overflow-y-auto">
+    <div className="min-w-0 space-y-6 overflow-y-auto pb-6">
       <PageHeader
         title={teacherLabel(t)}
         subtitle={<span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -81,7 +82,7 @@ function TeacherDetail({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
           <Button onClick={() => window.open(`/print/teacher/${t.id}`, '_blank')}><FileDown size={14} />PDF</Button>
         </>}
       />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat label="Số ca trong tuần" value={lessons.filter((l) => l.status === 'assigned').length} hint={`KNS ${credits.kns} · STEM ${credits.stem} · CDS/AI ${credits.cds} tiết quy đổi`} />
         <Stat label="Quãng đường ước tính" value={`${Math.round(totalKm)} km`} hint={`${Math.round(paidKm)} km là các chặng tính tiền`} />
         <Stat label="Chi phí di chuyển" value={money(cost)} />
@@ -95,8 +96,8 @@ function TeacherDetail({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
             const dayLeaves = allLeaves.filter((x) => x.teacherId === t.id && x.date === d)
             if (!day.length && !r.legs.length && !dayLeaves.length) return null
             return (
-              <div key={d} className="px-4 py-3">
-                <div className="mb-2 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+              <div key={d} className="px-5 py-5">
+                <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="mr-2 w-24 font-semibold">{dayLabel(d)}</span>
                   {r.legs.map((leg, n) => <LegView key={n} leg={leg} date={d} teacherId={t.id} ctx={ctx} />)}
                   {r.legs.length > 0 && <>
@@ -109,7 +110,7 @@ function TeacherDetail({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
                     <span className="tnum font-semibold">{money(r.cost)}</span>
                   </span>
                 </div>
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(145px,1fr))] gap-1.5">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-2">
                   {day.map((l) => <LessonChip key={l.id} lesson={l} ctx={ctx} show="school" detailsOnly />)}
                 </div>
               </div>
@@ -118,7 +119,7 @@ function TeacherDetail({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
           {!lessons.length && <Empty>Tuần này chưa có ca dạy.</Empty>}
         </div>
       </Card>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2">
         <PreferencesCard teacher={t} />
         <LeaveCard teacher={t} ctx={ctx} />
       </div>
@@ -138,7 +139,7 @@ function LegView({ leg, date, teacherId, ctx }: { leg: RouteLeg; date: string; t
     <span className="inline-flex flex-wrap items-center gap-1 text-slate-700">
       {leg.start !== 'K' && <span className="font-medium">{from}</span>}
       <ArrowRight size={13} className="text-slate-400" />
-      <span className="max-w-64 truncate" title={to}>{to}</span>
+      <span className="max-w-64 truncate" title={to}>{leg.toSchoolId ? <EntityAnchor kind="school" id={leg.toSchoolId}>{to}</EntityAnchor> : to}</span>
       {editable ? (
         <label className="inline-flex items-center gap-0.5 text-xs text-slate-500" title="Sửa số km của chặng này">
           <input aria-label={`Số km đến ${to}`} type="number" min={0} step="any" className="no-spin tnum w-16 !px-1.5 !py-0.5 text-right text-xs" key={leg.km} defaultValue={leg.km} onBlur={(e) => {
@@ -175,7 +176,7 @@ function PreferencesCard({ teacher: t }: { teacher: Teacher }) {
   }
   return (
     <Card title="Nguyện vọng cá nhân">
-      <div className="space-y-3 p-4">
+      <div className="space-y-4 p-5">
         <div className="flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-1.5 text-slate-600">Giới tính
             <select value={t.gender ?? ''} onChange={(e) => update(t.id, { gender: (e.target.value || null) as Gender | null })}>
@@ -222,7 +223,7 @@ function LeaveCard({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
   const mine = leaves.filter((l) => l.teacherId === t.id && l.date >= ctx.week.startDate).sort((a, b) => a.date.localeCompare(b.date))
   return (
     <Card title="Lịch nghỉ đã đăng ký" actions={<Button className="!py-1 text-xs" onClick={() => openLeaveDialog({ teacherId: t.id })}><Plus size={13} />Thêm</Button>}>
-      <ul className="max-h-56 space-y-1 overflow-y-auto p-4">
+      <ul className="max-h-56 space-y-1.5 overflow-y-auto p-5">
         {mine.map((l) => (
           <li key={l.id} className="flex items-center justify-between rounded bg-slate-50 px-2 py-1">
             <span>{dayLabel(l.date)} · {leaveWhen(l)} · {l.note}</span>

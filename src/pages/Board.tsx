@@ -1,15 +1,16 @@
 import { autoUpdate, flip, FloatingPortal, offset, shift, useDismiss, useFloating, useFocus, useHover, useInteractions, useRole } from '@floating-ui/react'
 import clsx from 'clsx'
-import { AlertOctagon, AlertTriangle, ArrowDown, ArrowUp, Check, FileDown, Info, Sparkles } from 'lucide-react'
+import { AlertOctagon, AlertTriangle, ArrowDown, ArrowUp, Check, FileDown, FileSpreadsheet, Info, Sparkles } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { EntityAnchor } from '../components/EntityLink'
 import { Badge, Button, Card, PageHeader, Stat, toast } from '../components/ui'
 import { wardOf } from '../domain/geo'
 import { coverage, healthOf, issueScore, ISSUE_META, schoolLoad, touchesSchool, type Health, type Issue, type IssueKind } from '../domain/issues'
 import { DAY_LABELS, money, shortDate, weekDates } from '../domain/time'
 import { needsTeacher } from '../domain/types'
 import { useWeekContext, useWeekIssues, weekCosts } from '../hooks'
-import { exportWeek } from '../services/exports'
+import { exportWeek, exportWeekSheet } from '../services/exports'
 import { useStore } from '../store'
 
 const HEALTH_STYLE: Record<Health, string> = {
@@ -70,7 +71,7 @@ function SortHeader({ k, sort, onSort, align, children }: { k: SortKey; sort: { 
   const active = sort.key === k
   const Arrow = sort.desc ? ArrowDown : ArrowUp
   return (
-    <th aria-sort={active ? (sort.desc ? 'descending' : 'ascending') : 'none'} className={clsx('px-2 py-2 font-medium first:pl-4', align === 'right' && 'text-right')}>
+    <th aria-sort={active ? (sort.desc ? 'descending' : 'ascending') : 'none'} className={clsx('px-3 py-3 font-medium first:pl-5', align === 'right' && 'text-right')}>
       <button onClick={() => onSort(k)} className={clsx('inline-flex items-center gap-0.5 hover:text-slate-900', active && 'font-semibold text-slate-900')}>
         {children}
         {active && <Arrow size={11} />}
@@ -139,12 +140,16 @@ export function BoardPage() {
               toast(`Đã tự điền ${r.filled} ca${r.left ? `, còn ${r.left} ca chưa có người phù hợp` : ''}`)
             }}><Sparkles size={14} />Tự điền ca trống</Button>
           )}
-          <Button onClick={() => exportWeek(ctx)}><FileDown size={14} />Xuất Excel</Button>
+          <Button data-testid="export-week-sheet" onClick={async () => {
+            const n = await exportWeekSheet(ctx)
+            toast(n ? `Đã xuất lịch tuần, nhưng ${n} ca không còn ô trống nên chưa có trong file` : 'Đã xuất lịch tuần theo mẫu Gaia')
+          }}><FileSpreadsheet size={14} />Xuất lịch tuần (mẫu Gaia)</Button>
+          <Button onClick={() => exportWeek(ctx)}><FileDown size={14} />Xuất Excel theo GV, trường</Button>
           <Button onClick={() => window.open('/print/week', '_blank')}><FileDown size={14} />Xuất PDF</Button>
         </>}
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4 min-[1400px]:grid-cols-7">
         <Stat label="Độ phủ lớp học" value={`${(cov.ratio * 100).toFixed(1)}%`} hint={`${cov.covered}/${cov.required} ca`} tone={cov.ratio < 1 ? 'critical' : undefined} />
         <KpiLink kind="uncovered" label="Chưa có giáo viên" value={count('uncovered')} tone={count('uncovered') ? 'critical' : undefined} />
         <KpiLink kind="overlap" label="Trùng lịch" value={count('overlap')} tone={count('overlap') ? 'critical' : undefined} />
@@ -178,19 +183,19 @@ export function BoardPage() {
                 <SortHeader k="region" sort={sort} onSort={onSort}>Khu vực</SortHeader>
                 <SortHeader k="load" sort={sort} onSort={onSort} align="right">Tổng ca</SortHeader>
                 <SortHeader k="errors" sort={sort} onSort={onSort} align="right">Lỗi</SortHeader>
-                {dates.map((d, i) => usedDays[i] && <th key={d} className="px-1 py-2 text-center font-medium">{DAY_LABELS[i]}<div className="font-normal text-slate-400">{shortDate(d)}</div></th>)}
+                {dates.map((d, i) => usedDays[i] && <th key={d} className="px-1.5 py-3 text-center font-medium">{DAY_LABELS[i]}<div className="font-normal text-slate-400">{shortDate(d)}</div></th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rows.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50">
-                  <td className="max-w-[280px] truncate px-4 py-1.5"><Link className="font-medium hover:text-emerald-700 hover:underline" to={`/schools/${r.id}`}>{r.name}</Link></td>
-                  <td className="max-w-[120px] truncate px-2 py-1.5 text-slate-600" title={r.ward}>{r.ward}</td>
-                  <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">{r.region}</td>
-                  <td className="tnum px-2 py-1.5 text-right text-slate-600">{r.total}</td>
-                  <td className="tnum px-2 py-1.5 text-right" title={`${r.urgent} lỗi cần xử lý, ${r.notes} ghi chú`}>{r.urgent > 0 ? <span className="font-semibold text-red-700">{r.urgent}</span> : <span className="text-slate-400">0</span>}</td>
+                  <td className="max-w-[300px] truncate px-5 py-3"><EntityAnchor kind="school" id={r.id} className="font-medium">{r.name}</EntityAnchor></td>
+                  <td className="max-w-[120px] truncate px-3 py-3 text-slate-600" title={r.ward}>{r.ward}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">{r.region}</td>
+                  <td className="tnum px-3 py-3 text-right text-slate-600">{r.total}</td>
+                  <td className="tnum px-3 py-3 text-right" title={`${r.urgent} lỗi cần xử lý, ${r.notes} ghi chú`}>{r.urgent > 0 ? <span className="font-semibold text-red-700">{r.urgent}</span> : <span className="text-slate-400">0</span>}</td>
                   {r.days.map((c, i) => usedDays[i] && (
-                    <td key={c.date} className="px-1 py-1 text-center">
+                    <td key={c.date} className="px-1.5 py-2 text-center">
                       {c.count > 0 && <HealthCell schoolId={r.id} schoolName={r.name} date={c.date} count={c.count} issues={c.issues} />}
                     </td>
                   ))}
@@ -199,7 +204,7 @@ export function BoardPage() {
             </tbody>
           </table>
         </div>
-        <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 px-4 py-2 text-xs text-slate-600">
+        <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 px-5 py-3 text-xs text-slate-600">
           <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-5 items-center justify-center rounded bg-red-100 text-red-800"><AlertOctagon size={10} /></span>Trùng lịch, ca trống, GV đang nghỉ</span>
           <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-5 items-center justify-center rounded bg-amber-100 text-amber-900"><AlertTriangle size={10} /></span>Không kịp di chuyển</span>
           <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-5 items-center justify-center rounded bg-emerald-50 text-emerald-800"><Check size={10} /></span>Ổn</span>

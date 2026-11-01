@@ -98,3 +98,12 @@ export async function exportWeek(ctx: Ctx) {
   }
   download(await wb.xlsx.writeBuffer() as ArrayBuffer, `lich-tuan-${ctx.week.startDate}.xlsx`)
 }
+
+/** Xuất lịch tuần đúng bố cục sheet "LỊCH VŨNG TÀU" của Gaia. Trả về số ca không xếp được vào ô nào. */
+export async function exportWeekSheet(ctx: Ctx) {
+  const { buildWeekWorkbook } = await import('./week-sheet-export')
+  const { wb, sheet } = await buildWeekWorkbook(ctx)
+  const [, month, week] = sheet.sheetName.match(/Thang (\d+) - Tuan (\d+)/) ?? []
+  download((await wb.xlsx.writeBuffer()) as ArrayBuffer, `LICH-TUAN-T${month}-TUAN${week}-${ctx.week.startDate}.xlsx`)
+  return sheet.unplaced.length
+}

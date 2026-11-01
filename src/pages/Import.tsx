@@ -73,10 +73,10 @@ export function ImportPage() {
   const canApply = !!schoolId && !!week && !!rows?.length && counts.incomplete === 0 && (counts.new + counts.changed + removeIds.length > 0)
 
   return (
-    <div className="mx-auto max-w-[1300px] space-y-4">
+    <div className="mx-auto max-w-[1300px] space-y-6">
       <PageHeader title="Nhập ảnh lịch học" subtitle="Tải ảnh chụp hoặc scan lịch của trường, kiểm tra dữ liệu đọc được, rồi duyệt để cập nhật vào lịch tuần. Không có gì được ghi vào lịch trước khi duyệt." />
       <Card>
-        <div className="flex flex-wrap items-end gap-3 p-4">
+        <div className="flex flex-wrap items-end gap-4 p-5">
           <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">Trường</span>
             <select value={schoolId} onChange={(e) => setSchoolId(e.target.value)} className="w-80">
               <option value="">Chọn trường…</option>

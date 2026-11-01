@@ -9,6 +9,7 @@ import { dayLabel, money } from '../domain/time'
 import { teacherLabel } from '../domain/types'
 import { useWeekContext, type Ctx } from '../hooks'
 import { useStore } from '../store'
+import { EntityAnchor, EntityText } from './EntityLink'
 import { Button, toast } from './ui'
 
 const signed = (n: number) => (n > 0 ? `+${money(n)}` : n < 0 ? `−${money(-n)}` : 'Không đổi')
@@ -24,7 +25,7 @@ function ChangeCard({ change: c, ctx }: { change: CostChange; ctx: Ctx }) {
   return (
     <div className="rounded-md border border-slate-200 p-3" data-testid="cost-change">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-semibold">{t ? teacherLabel(t) : c.teacherId}</span>
+        <span className="font-semibold">{t ? <EntityAnchor kind="teacher" id={t.id}>{teacherLabel(t)}</EntityAnchor> : c.teacherId}</span>
         <span className="tnum text-right">
           <span className="text-slate-500">{money(c.before.cost)}</span>
           <ArrowRight size={12} className="mx-1 inline text-slate-400" />
@@ -34,7 +35,7 @@ function ChangeCard({ change: c, ctx }: { change: CostChange; ctx: Ctx }) {
       </div>
       <div className="text-xs text-slate-500">{dayLabel(c.date)}</div>
       <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-slate-700">
-        {c.reasons.map((r, i) => <li key={i}>{r}</li>)}
+        {c.reasons.map((r, i) => <li key={i}><EntityText text={r} /></li>)}
       </ul>
     </div>
   )
@@ -94,8 +95,8 @@ function Dialog({ lessonId, teacherId, ctx, close }: Request & { ctx: Ctx; close
         <header className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
           <div>
             <h2 className="font-semibold">Xác nhận đổi giáo viên</h2>
-            <p className="text-slate-600">{current ? teacherLabel(current) : 'Chưa có giáo viên'} <ArrowRight size={12} className="mx-0.5 inline text-slate-400" /> <b>{teacherLabel(next)}</b></p>
-            <p className="tnum text-xs text-slate-500">{dayLabel(lesson.date)} · {lesson.start ?? `Tiết ${lesson.period}`}{lesson.end ? `–${lesson.end}` : ''} · lớp {lesson.className ?? '—'}{lesson.subject ? ` · ${lesson.subject}` : ''} · {school?.fullName}</p>
+            <p className="text-slate-600">{current ? <EntityAnchor kind="teacher" id={current.id}>{teacherLabel(current)}</EntityAnchor> : 'Chưa có giáo viên'} <ArrowRight size={12} className="mx-0.5 inline text-slate-400" /> <b><EntityAnchor kind="teacher" id={next.id}>{teacherLabel(next)}</EntityAnchor></b></p>
+            <p className="tnum text-xs text-slate-500">{dayLabel(lesson.date)} · {lesson.start ?? `Tiết ${lesson.period}`}{lesson.end ? `–${lesson.end}` : ''} · lớp {lesson.className ?? '—'}{lesson.subject ? ` · ${lesson.subject}` : ''} · {school && <EntityAnchor kind="school" id={school.id}>{school.fullName}</EntityAnchor>}</p>
           </div>
           <button aria-label="Đóng" className="text-slate-400 hover:text-slate-700" onClick={close}><X size={16} /></button>
         </header>

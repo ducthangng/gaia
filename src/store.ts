@@ -80,7 +80,7 @@ const normName = (s: string) => s.normalize('NFC').replace(/\s+/g, ' ').trim().t
 const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 const OFFICE_OF = (v: string | null) => (v && /phú mỹ/i.test(v) ? 'PM' : 'BR')
 
-const DATA_VERSION = 5
+const DATA_VERSION = 6
 /** Bản lưu cũ hơn số này thì bỏ và nạp lại từ seed; từ số này trở đi được nâng cấp, giữ nguyên chỉnh sửa. */
 const OLDEST_KEPT_VERSION = 4
 
@@ -439,7 +439,13 @@ export const useStore = create<State>()(
         const p = persisted as State
         const key = (l: RecordedLeg) => `${l.teacherId}|${l.date}|${l.session}|${l.period}|${l.start}`
         const known = new Map(seed.weeks.flatMap((w) => w.legs).map((l) => [key(l), l.toSchoolId]))
-        return { ...p, weeks: p.weeks.map((w) => ({ ...w, legs: w.legs.map((l) => ({ ...l, toSchoolId: l.toSchoolId ?? known.get(key(l)) ?? null })) })) }
+        // v6: bản demo có tên giáo viên thật; chỉ thay tên giữ chỗ, không đè tên đã được sửa tay.
+        const names = new Map(seed.teachers.map((t) => [t.id, t.name]))
+        return {
+          ...p,
+          teachers: p.teachers.map((t) => (t.name === `Giáo viên ${t.id}` && names.has(t.id) ? { ...t, name: names.get(t.id)! } : t)),
+          weeks: p.weeks.map((w) => ({ ...w, legs: w.legs.map((l) => ({ ...l, toSchoolId: l.toSchoolId ?? known.get(key(l)) ?? null })) })),
+        }
       },
       storage: createJSONStorage(() => localStorage),
       partialize: ({ teachers, schools, offices, leaves, distances, weeks, settings, kmOverrides, activeWeekId, nextId, anonymized }) => ({ teachers, schools, offices, leaves, distances, weeks, settings, kmOverrides, activeWeekId, nextId, anonymized }),

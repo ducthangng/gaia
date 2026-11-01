@@ -6,8 +6,8 @@
 
 data.xlsx bổ sung địa chỉ trường, km chính thức từ văn phòng, địa chỉ và khu vực dạy của giáo viên.
 
-seed.local.json chứa dữ liệu cá nhân thật (SĐT, địa chỉ nhà) và không được commit/deploy.
-seed.json là bản đã ẩn danh, dùng cho bản build/demo.
+seed.local.json có đủ SĐT, địa chỉ nhà và không được commit/deploy.
+seed.json dùng cho bản build/demo: có tên giáo viên, không có SĐT, địa chỉ nhà, vị trí nhà, ghi chú.
 """
 import argparse
 import collections
@@ -462,7 +462,8 @@ def main():
 
     if args.anonymize:
         for t in out["teachers"]:
-            t.update(name=f"Giáo viên {t['id']}", phone=None, address=None)
+            # Bản demo hiện tên giáo viên theo yêu cầu của Gaia; SĐT, địa chỉ và vị trí nhà vẫn bị bỏ.
+            t.update(phone=None, address=None)
             t.pop("homeGeo", None)
             t.pop("homeArea", None)
         for s in out["schools"]:

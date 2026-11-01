@@ -12,6 +12,7 @@ import { useStore } from '../store'
 import { LessonChip } from './LessonChip'
 import { SEVERITY_COLOR, SEVERITY_ICON } from './SchoolAlerts'
 import type { MapDot, RoadInfo } from './TravelMap'
+import { EntityAnchor, EntityText } from './EntityLink'
 import { Badge, Button, Card, toast } from './ui'
 
 const TravelMap = lazy(() => import('./TravelMap'))
@@ -84,11 +85,11 @@ export function MovementPanel({ school: s, ctx, issues, selection, onSelect }: {
                 const active = selected?.id === i.lesson.id
                 return (
                   <li key={`${i.kind}-${i.lesson.id}-${n}`}>
-                    <button onClick={() => pickAlert(i)} aria-pressed={active} className={clsx('block w-full px-3 py-2.5 text-left hover:bg-slate-50', active && 'bg-amber-50 ring-1 ring-inset ring-amber-400')}>
+                    <div role="button" tabIndex={0} onClick={() => pickAlert(i)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickAlert(i) } }} aria-pressed={active} data-testid="alert-row" className={clsx('block w-full cursor-pointer px-4 py-3 text-left hover:bg-slate-50', active && 'bg-amber-50 ring-1 ring-inset ring-amber-400')}>
                       <span className="flex items-center gap-1.5 font-medium"><Icon size={14} className={SEVERITY_COLOR[meta.severity]} />{meta.label}</span>
                       <span className="tnum mt-0.5 block text-xs text-slate-500">{dayLabel(i.lesson.date)} · {i.lesson.start ?? SESSION_LABEL[i.lesson.session]}{i.lesson.className ? ` · lớp ${i.lesson.className}` : ''}</span>
-                      <span className="mt-0.5 block text-xs text-slate-700">{i.detail}</span>
-                    </button>
+                      <span className="mt-0.5 block text-xs text-slate-700"><EntityText text={i.detail} /></span>
+                    </div>
                   </li>
                 )
               })}
@@ -157,16 +158,16 @@ function MovementSummary({ lesson, movement: m, ctx, target, road, mapped }: { l
   return (
     <div className={clsx('space-y-1.5 border-b px-4 py-2.5', m.verdict === 'late' ? 'border-amber-200 bg-amber-50' : m.verdict === 'overlap' ? 'border-red-200 bg-red-50' : 'border-slate-100 bg-slate-50')} data-testid="movement-summary">
       <div className="flex flex-wrap items-center gap-2">
-        <b>{teacherLabel(teacher)}</b>
+        <b><EntityAnchor kind="teacher" id={teacher.id}>{teacherLabel(teacher)}</EntityAnchor></b>
         <span className="text-slate-500">{dayLabel(lesson.date)}</span>
         <Badge tone={verdict.tone}>{m.verdict === 'ok' && <Check size={10} />}{m.alreadyThere ? 'Đã ở trường' : verdict.label}</Badge>
       </div>
       <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-slate-700">
         {m.origin.kind === 'home' && <Home size={13} className="text-slate-500" />}
-        <span className="font-medium" title={m.origin.kind === 'home' ? teacher.address ?? undefined : undefined}>{m.alreadyThere ? 'Ca trước cùng trường' : m.origin.kind === 'home' && teacher.homeArea ? `Nhà giáo viên (${teacher.homeArea})` : m.origin.label}</span>
+        <span className="font-medium" title={m.origin.kind === 'home' ? teacher.address ?? undefined : undefined}>{m.alreadyThere ? 'Ca trước cùng trường' : m.origin.kind === 'home' && teacher.homeArea ? `Nhà giáo viên (${teacher.homeArea})` : <EntityText text={m.origin.label} />}</span>
         {m.previous && <span className="tnum text-xs text-slate-500">(hết ca {m.previous.end ?? '—'}, lớp {m.previous.className ?? '—'})</span>}
         <ArrowRight size={13} className="text-slate-400" />
-        <span className="font-medium">{target.fullName}</span>
+        <span className="font-medium"><EntityAnchor kind="school" id={target.id}>{target.fullName}</EntityAnchor></span>
         <span className="tnum text-xs text-slate-500">({lesson.start ?? `tiết ${lesson.period}`}, lớp {lesson.className ?? '—'})</span>
       </div>
       {!m.alreadyThere && (

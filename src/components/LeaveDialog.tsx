@@ -8,6 +8,7 @@ import { byTime } from '../domain/route'
 import { dayLabel, SESSION_LABEL } from '../domain/time'
 import { teacherLabel, type Lesson, type Session } from '../domain/types'
 import { useStore } from '../store'
+import { EntityAnchor, EntityText } from './EntityLink'
 import { Button } from './ui'
 
 interface Request {
@@ -78,7 +79,7 @@ function Dialog({ request, close }: { request: Request; close: () => void }) {
         </header>
         {done !== null ? (
           <div className="space-y-3 p-4">
-            <p>Đã ghi nhận cho <b>{teacher && teacherLabel(teacher)}</b>. {done ? <>{done} ca đã được chuyển đi; các ca dạy cần người thay đang nằm trong tab Cảnh báo.</> : 'Không có ca nào bị ảnh hưởng.'}</p>
+            <p>Đã ghi nhận cho <b>{teacher && <EntityAnchor kind="teacher" id={teacher.id}>{teacherLabel(teacher)}</EntityAnchor>}</b>. {done ? <>{done} ca đã được chuyển đi; các ca dạy cần người thay đang nằm trong tab Cảnh báo.</> : 'Không có ca nào bị ảnh hưởng.'}</p>
             <div className="flex justify-end gap-2">
               <Button onClick={close}>Đóng</Button>
               {done > 0 && <Link to="/alerts?kind=uncovered" onClick={close} className="rounded-md bg-emerald-700 px-2.5 py-1.5 font-medium text-white hover:bg-emerald-800">Xếp người dạy thay</Link>}
@@ -129,12 +130,12 @@ function Dialog({ request, close }: { request: Request; close: () => void }) {
                           <label key={l.id} className="flex cursor-pointer items-center gap-2 px-3 py-1 hover:bg-slate-50">
                             <input type="checkbox" checked={selected.includes(l.id)} onChange={(e) => setPicked((x) => (e.target.checked ? [...x, l.id] : x.filter((y) => y !== l.id)))} />
                             <span className="tnum w-24 shrink-0 text-slate-600">{l.start ? `${l.start}${l.end ? `–${l.end}` : ''}` : SESSION_LABEL[l.session]}</span>
-                            <span className="truncate">{lessonText(l)}</span>
+                            <span className="truncate"><EntityText text={lessonText(l)} /></span>
                           </label>
                         ) : (
                           <div key={l.id} className="flex gap-2 px-3 py-1">
                             <span className="tnum w-24 shrink-0 text-slate-600">{l.start ? `${l.start}${l.end ? `–${l.end}` : ''}` : SESSION_LABEL[l.session]}</span>
-                            <span className="truncate">{lessonText(l)}</span>
+                            <span className="truncate"><EntityText text={lessonText(l)} /></span>
                           </div>
                         ))}
                       </div>

@@ -8,6 +8,7 @@ import { dayLabel, money, SESSION_LABEL } from '../domain/time'
 import { prettyName } from '../domain/timetable'
 import { teacherLabel, type Lesson, type Teacher } from '../domain/types'
 import { openReassignConfirm } from './CostExplanation'
+import { EntityAnchor } from './EntityLink'
 import { openLeaveDialog } from './LeaveDialog'
 import { openLessonEditor } from './LessonEditor'
 import type { Ctx } from '../hooks'
@@ -85,7 +86,7 @@ export function LessonChip({ lesson: l, ctx, show, fill, mark, onShowOnMap, deta
         title={fill ? [`${l.start ?? `Tiết ${l.period}`}${l.end ? `–${l.end}` : ''}`, l.className ?? l.note, l.subject, teacher ? teacherLabel(teacher) : 'Chưa có giáo viên', l.note && l.className ? l.note : null].filter(Boolean).join(' · ') : undefined}
         className={clsx(
           'block w-full rounded border text-left leading-tight transition hover:ring-2 hover:ring-emerald-500/40',
-          fill ? 'relative h-full overflow-hidden px-1.5 py-0.5 text-xs hover:z-10' : 'px-1.5 py-1',
+          fill ? 'relative h-full overflow-hidden px-2 py-1 text-xs hover:z-10' : 'px-2 py-1.5',
           mark === 'critical' && 'ring-2 ring-red-500',
           mark === 'warning' && 'ring-2 ring-amber-500',
           l.type === 'substitute' && !uncovered && 'border-l-4 border-l-slate-700',
@@ -140,15 +141,15 @@ function AssignPanel({ lesson: l, ctx, close, onShowOnMap, detailsOnly }: { less
 
   return (
     <>
-      <div className="border-b border-slate-100 px-3 py-2.5">
+      <div className="border-b border-slate-100 px-4 py-3">
         <div className="font-semibold">{l.className ?? l.note ?? 'Ca dạy'} · {l.subject ?? 'Chưa rõ môn'}</div>
-        <div className="text-slate-600">{school?.fullName}</div>
+        <div className="text-slate-600">{school ? <EntityAnchor kind="school" id={school.id}>{school.fullName}</EntityAnchor> : null}</div>
         <div className="text-xs text-slate-500">
           {dayLabel(l.date)} · {SESSION_LABEL[l.session]} · {l.start && l.end ? `${l.start}–${l.end}` : `Tiết ${l.period}`}
         </div>
         <div className="mt-1 text-xs">
-          {current ? <>Đang dạy: <b>{teacherLabel(current)}</b></> : <span className="font-medium text-red-700">Chưa có giáo viên</span>}
-          {original && original.id !== current?.id && <span className="text-slate-500"> · GV gốc: {teacherLabel(original)}</span>}
+          {current ? <>Đang dạy: <b><EntityAnchor kind="teacher" id={current.id}>{teacherLabel(current)}</EntityAnchor></b></> : <span className="font-medium text-red-700">Chưa có giáo viên</span>}
+          {original && original.id !== current?.id && <span className="text-slate-500"> · GV gốc: <EntityAnchor kind="teacher" id={original.id}>{teacherLabel(original)}</EntityAnchor></span>}
         </div>
         {l.note && <div className="mt-0.5 text-xs text-slate-500">Ghi chú: {l.note}</div>}
         {onShowOnMap && l.teacherId && (
@@ -206,11 +207,12 @@ function CandidateRow({ c, rank, current, onPick }: { c: Candidate; rank: number
   const scoreTone = !c.available ? 'bg-slate-200 text-slate-600' : c.score >= 75 ? 'bg-emerald-700 text-white' : c.score >= 50 ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-900'
   return (
     <li className="border-b border-slate-50 last:border-0">
-      <button disabled={!c.available && !current} onClick={onPick} data-testid="candidate" className={clsx('flex w-full items-start gap-2.5 px-3 py-2 text-left', c.available ? 'hover:bg-emerald-50/60' : 'bg-slate-50/60')}>
+      {/* Dùng div vì trong hàng có link mở hồ sơ, mà link không được nằm trong button. */}
+      <div role="button" tabIndex={0} aria-disabled={!c.available && !current} onClick={() => { if (c.available || current) onPick() }} onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && (c.available || current)) { e.preventDefault(); onPick() } }} data-testid="candidate" className={clsx('flex w-full items-start gap-2.5 px-3 py-2.5 text-left', c.available ? 'cursor-pointer hover:bg-emerald-50/60' : 'cursor-not-allowed bg-slate-50/60')}>
         <span className={clsx('tnum mt-0.5 w-9 shrink-0 rounded py-0.5 text-center text-xs font-semibold', scoreTone)} title="Điểm phù hợp /100">{c.score}</span>
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline justify-between gap-2">
-            <span className="truncate font-medium"><span className="tnum mr-1 text-xs text-slate-400">{rank}.</span>{teacherLabel(c.teacher)}</span>
+            <span className="truncate font-medium"><span className="tnum mr-1 text-xs text-slate-400">{rank}.</span><EntityAnchor kind="teacher" id={c.teacher.id}>{teacherLabel(c.teacher)}</EntityAnchor></span>
             <span className={clsx('tnum whitespace-nowrap text-xs', c.extraCost > 0 ? 'text-slate-700' : 'text-slate-500')} title="Chi phí di chuyển tăng thêm trong ngày">
               {c.extraCost > 0 ? `+${money(c.extraCost)}` : c.extraCost < 0 ? money(c.extraCost) : 'Không tăng chi phí'}
             </span>
@@ -226,7 +228,7 @@ function CandidateRow({ c, rank, current, onPick }: { c: Candidate; rank: number
             {current && <Badge tone="blue">Đang dạy</Badge>}
           </span>
         </span>
-      </button>
+      </div>
     </li>
   )
 }

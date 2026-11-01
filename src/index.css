@@ -6,8 +6,8 @@
 }
 
 html, body, #root { height: 100%; }
-body { @apply bg-slate-50 text-slate-900 text-[13px] antialiased; }
-input, select, textarea { @apply rounded-md border border-slate-300 bg-white px-2 py-1 text-[13px] outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600; }
+body { @apply bg-slate-50 text-slate-900 text-sm leading-relaxed antialiased; }
+input, select, textarea { @apply rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600; }
 input[type="checkbox"], input[type="radio"] { @apply accent-emerald-700; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }

@@ -2,6 +2,7 @@ import { AlertTriangle, FileDown, MapPin, PanelLeftClose, PanelLeftOpen, Plus, S
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useParams, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
+import { EntityAnchor } from '../components/EntityLink'
 import { SchoolsTable } from '../components/InfoTables'
 import { openNewSchoolDialog } from '../components/NewSchoolDialog'
 import { ViewSwitch } from '../components/InlineCell'
@@ -34,14 +35,14 @@ function SchoolsDetail() {
   const school = (id ? ctx.schoolById.get(id) : undefined) ?? list[0]
 
   return (
-    <div className="mx-auto flex h-full max-w-[1700px] flex-col gap-2">
+    <div className="mx-auto flex h-full max-w-[1700px] flex-col gap-4">
     <div className="flex items-center justify-between gap-3"><ViewSwitch /><Button onClick={openNewSchoolDialog}><Plus size={14} />Thêm trường</Button></div>
-    <div className={clsx('grid min-h-0 w-full flex-1 gap-4', listOpen ? 'grid-cols-[250px_minmax(0,1fr)]' : 'grid-cols-[minmax(0,1fr)]')}>
+    <div className={clsx('grid min-h-0 w-full flex-1 gap-6', listOpen ? 'grid-cols-[270px_minmax(0,1fr)]' : 'grid-cols-[minmax(0,1fr)]')}>
       {listOpen && <Card className="flex min-h-0 flex-col self-stretch overflow-hidden">
-        <div className="border-b border-slate-100 p-2"><input aria-label="Tìm trường" className="w-full" placeholder="Tìm trường…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-        <nav className="min-h-0 flex-1 overflow-y-auto p-1">
+        <div className="border-b border-slate-100 p-3"><input aria-label="Tìm trường" className="w-full" placeholder="Tìm trường…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+        <nav className="min-h-0 flex-1 overflow-y-auto p-2">
           {list.map((s) => (
-            <NavLink key={s.id} to={`/schools/${s.id}`} className={clsx('flex items-center justify-between gap-2 rounded px-2 py-1.5', s.id === school?.id ? 'bg-emerald-50 font-medium text-emerald-900' : 'hover:bg-slate-100', !stats.get(s.id) && 'text-slate-400')}>
+            <NavLink key={s.id} to={`/schools/${s.id}`} className={clsx('flex items-center justify-between gap-2 rounded-md px-3 py-2', s.id === school?.id ? 'bg-emerald-50 font-medium text-emerald-900' : 'hover:bg-slate-100', !stats.get(s.id) && 'text-slate-400')}>
               <span className="truncate">{s.fullName}</span>
               {!!stats.get(s.id) && <span className="tnum text-xs text-slate-500">{stats.get(s.id)}</span>}
             </NavLink>
@@ -75,7 +76,7 @@ function SchoolDetail({ school: s, ctx, issues, listToggle }: { school: School; 
   const cov = coverage(lessons)
   const sameName = ctx.world.schools.filter((x) => x.id !== s.id && x.name && x.name === s.name)
   return (
-    <div className="min-w-0 space-y-4 overflow-y-auto">
+    <div className="min-w-0 space-y-6 overflow-y-auto pb-6">
       <PageHeader
         title={s.fullName}
         subtitle={<span className="inline-flex flex-wrap items-center gap-2">
@@ -122,14 +123,14 @@ function ReferEditor({ school: s, ctx }: { school: School; ctx: Ctx }) {
     <Card title={<span className="inline-flex items-center gap-1.5"><Star size={14} />Danh sách giáo viên Refer</span>} actions={s.referSource === 'derived' ? (
       <Button variant="ghost" className="text-xs" onClick={() => updateSchool(s.id, { referSource: 'confirmed' })}>Xác nhận danh sách</Button>
     ) : <Badge tone="green">Gaia đã xác nhận</Badge>}>
-      <div className="space-y-2 p-4">
+      <div className="space-y-3 p-5">
         {s.referSource === 'derived' && (
           <p className="text-xs text-amber-800">Workbook không có danh sách Refer. Danh sách tạm này suy ra từ các GV dạy chính ổn định tại trường trong 6 tuần gần nhất và cần Gaia xác nhận.</p>
         )}
         <div className="flex flex-wrap gap-1.5">
           {s.referredTeacherIds.map((id) => (
             <span key={id} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 py-0.5 pl-2.5 pr-1 text-emerald-900">
-              {ctx.teacherById.get(id) ? teacherLabel(ctx.teacherById.get(id)!) : id}
+              <EntityAnchor kind="teacher" id={id}>{ctx.teacherById.get(id) ? teacherLabel(ctx.teacherById.get(id)!) : id}</EntityAnchor>
               <button aria-label="Bỏ khỏi danh sách Refer" className="rounded-full p-0.5 hover:bg-emerald-200" onClick={() => toggleRefer(s.id, id)}><X size={12} /></button>
             </span>
           ))}

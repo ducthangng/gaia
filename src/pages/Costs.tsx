@@ -1,6 +1,7 @@
 import { FileDown, Info } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { EntityAnchor } from '../components/EntityLink'
 import { Badge, Button, Card, PageHeader, Stat } from '../components/ui'
 import { dayLabel, money, weekDates } from '../domain/time'
 import { teacherLabel } from '../domain/types'
@@ -40,7 +41,7 @@ export function CostsPage() {
           <Button onClick={() => window.open('/print/costs', '_blank')}><FileDown size={14} />Xuất PDF</Button>
         </>}
       />
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat label="Tổng chi phí tuần" value={money(total)} />
         <Stat label="Tổng quãng đường" value={`${Math.round(km).toLocaleString('vi-VN')} km`} hint="Gồm chặng cuối về nhà" />
         <Stat label="Giáo viên có di chuyển" value={rows.length} />
@@ -48,7 +49,7 @@ export function CostsPage() {
           <Stat label="Đối soát với workbook" value={mismatches ? `Lệch ${mismatches} GV` : 'Khớp 100%'} tone={mismatches ? 'warning' : undefined} hint={from !== ctx.week.startDate ? `Cột CTP tính từ ${from} do tuần vắt qua hai tháng` : 'So với cột CTP từng giáo viên'} />
         ) : <Stat label="GV có chặng ước tính km" value={estimated} tone={estimated ? 'warning' : undefined} hint="Chưa từng ghi nhận km cho chặng đó" />}
       </div>
-      <div className="mb-3 flex items-start gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-600">
+      <div className="mb-4 flex items-start gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-600">
         <Info size={14} className="mt-0.5 shrink-0 text-sky-600" />
         {tier ? (
           <span>Đang tính theo <b>bậc khoảng cách của workbook</b> (mỗi chặng một mức, chặng về nhà không tính tiền). Đổi sang km × đơn giá tại <Link className="text-emerald-700 underline" to="/settings">Cấu hình</Link>.</span>
@@ -57,7 +58,7 @@ export function CostsPage() {
         )}
       </div>
       {!compareOn && tier && unrecordedDays > 0 && ctx.week.legs.length > 0 && (
-        <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
           <Info size={14} className="mt-0.5 shrink-0" />
           <span>Workbook mới ghi {money(recordedTotal)} cho tuần này vì còn {unrecordedDays} ngày dạy của giáo viên chưa điền XUẤT PHÁT và SỐ KM. Số trên đây là dự kiến đủ cả tuần, nên cao hơn.</span>
         </div>
@@ -67,11 +68,11 @@ export function CostsPage() {
           <table className="w-full">
             <thead className="border-b border-slate-200 text-xs text-slate-500">
               <tr>
-                <th className="sticky left-0 bg-white px-4 py-2 text-left font-medium">Giáo viên</th>
-                {dates.map((d) => <th key={d} className="px-2 py-2 text-right font-medium">{dayLabel(d)}</th>)}
-                <th className="px-2 py-2 text-right font-medium">Km</th>
-                <th className="px-4 py-2 text-right font-medium">Tổng</th>
-                {compareOn && <th className="px-4 py-2 text-right font-medium">Workbook</th>}
+                <th className="sticky left-0 bg-white px-5 py-3 text-left font-medium">Giáo viên</th>
+                {dates.map((d) => <th key={d} className="px-3 py-3 text-right font-medium">{dayLabel(d)}</th>)}
+                <th className="px-3 py-3 text-right font-medium">Km</th>
+                <th className="px-5 py-3 text-right font-medium">Tổng</th>
+                {compareOn && <th className="px-5 py-3 text-right font-medium">Workbook</th>}
               </tr>
             </thead>
             <tbody className="tnum divide-y divide-slate-100">
@@ -79,26 +80,26 @@ export function CostsPage() {
                 const rep = reported?.[r.teacherId]?.cost ?? 0
                 return (
                   <tr key={r.teacherId} className="hover:bg-slate-50">
-                    <td className="sticky left-0 bg-white px-4 py-1.5"><Link to={`/teachers/${r.teacherId}`} className="font-medium hover:text-emerald-700 hover:underline">{label(r.teacherId)}</Link>{r.hasEstimate && <Badge tone="amber" className="ml-1.5">ước tính</Badge>}</td>
+                    <td className="sticky left-0 bg-white px-5 py-2.5"><EntityAnchor kind="teacher" id={r.teacherId} className="font-medium">{label(r.teacherId)}</EntityAnchor>{r.hasEstimate && <Badge tone="amber" className="ml-1.5">ước tính</Badge>}</td>
                     {r.days.map((d) => (
-                      <td key={d.date} className="px-2 py-1.5 text-right" title={d.legs.length ? `${d.legs.map((l) => `${l.start} ${l.km}km`).join(' → ')} → về nhà ${d.returnKm}km` : undefined}>
+                      <td key={d.date} className="px-3 py-2.5 text-right" title={d.legs.length ? `${d.legs.map((l) => `${l.start} ${l.km}km`).join(' → ')} → về nhà ${d.returnKm}km` : undefined}>
                         {d.legs.length ? (d.cost ? d.cost.toLocaleString('vi-VN') : <span className="text-slate-400">0</span>) : ''}
                       </td>
                     ))}
-                    <td className="px-2 py-1.5 text-right text-slate-500">{Math.round(r.km)}</td>
-                    <td className="px-4 py-1.5 text-right font-semibold">{r.cost.toLocaleString('vi-VN')}</td>
-                    {compareOn && <td className={`px-4 py-1.5 text-right ${rep === reportedSum(r) ? 'text-slate-500' : 'font-medium text-amber-700'}`}>{rep.toLocaleString('vi-VN')}</td>}
+                    <td className="px-3 py-2.5 text-right text-slate-500">{Math.round(r.km)}</td>
+                    <td className="px-5 py-2.5 text-right font-semibold">{r.cost.toLocaleString('vi-VN')}</td>
+                    {compareOn && <td className={`px-5 py-2.5 text-right ${rep === reportedSum(r) ? 'text-slate-500' : 'font-medium text-amber-700'}`}>{rep.toLocaleString('vi-VN')}</td>}
                   </tr>
                 )
               })}
             </tbody>
             <tfoot className="tnum border-t-2 border-slate-200 font-semibold">
               <tr>
-                <td className="sticky left-0 bg-white px-4 py-2">Tổng cộng</td>
-                {dayTotals.map((t, i) => <td key={i} className="px-2 py-2 text-right">{t ? t.toLocaleString('vi-VN') : ''}</td>)}
-                <td className="px-2 py-2 text-right">{Math.round(km).toLocaleString('vi-VN')}</td>
-                <td className="px-4 py-2 text-right">{total.toLocaleString('vi-VN')}</td>
-                {compareOn && <td className="px-4 py-2 text-right text-slate-500">{rows.reduce((s, r) => s + (reported?.[r.teacherId]?.cost ?? 0), 0).toLocaleString('vi-VN')}</td>}
+                <td className="sticky left-0 bg-white px-5 py-3">Tổng cộng</td>
+                {dayTotals.map((t, i) => <td key={i} className="px-3 py-3 text-right">{t ? t.toLocaleString('vi-VN') : ''}</td>)}
+                <td className="px-3 py-3 text-right">{Math.round(km).toLocaleString('vi-VN')}</td>
+                <td className="px-5 py-3 text-right">{total.toLocaleString('vi-VN')}</td>
+                {compareOn && <td className="px-5 py-3 text-right text-slate-500">{rows.reduce((s, r) => s + (reported?.[r.teacherId]?.cost ?? 0), 0).toLocaleString('vi-VN')}</td>}
               </tr>
             </tfoot>
           </table>

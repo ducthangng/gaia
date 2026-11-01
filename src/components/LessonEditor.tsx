@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { blockerLabel } from '../domain/constraints'
 import { explainLessonChange } from '../domain/cost-explain'
 import { CostExplanationView } from './CostExplanation'
+import { EntityText } from './EntityLink'
 import { ISSUE_META, newIssues, weekIssues, type Issue } from '../domain/issues'
 import { applyBulk, applyDraft, draftErrors, draftFrom, newLesson, type BulkAction, type BulkScope, type LessonDraft } from '../domain/lesson-edit'
 import { evaluate } from '../domain/recommend'
@@ -71,7 +72,7 @@ function ImpactNotice({ fresh, ctx }: { fresh: Issue[]; ctx: Ctx }) {
   return (
     <div className="space-y-1 rounded-md bg-amber-50 px-3 py-2 text-amber-950" data-testid="impact">
       {urgent.slice(0, 5).map((i, n) => (
-        <div key={n} className="flex gap-1.5"><AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-700" /><span><b>{ISSUE_META[i.kind].label}:</b> {dayLabel(i.lesson.date)}, {ctx.schoolById.get(i.lesson.schoolId)?.name}. {i.detail}</span></div>
+        <div key={n} className="flex gap-1.5"><AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-700" /><span><b>{ISSUE_META[i.kind].label}:</b> {dayLabel(i.lesson.date)}, <EntityText text={ctx.schoolById.get(i.lesson.schoolId)?.fullName ?? ''} />. <EntityText text={i.detail} /></span></div>
       ))}
       {urgent.length > 5 && <div className="text-xs">và {urgent.length - 5} cảnh báo khác</div>}
       {notes > 0 && <div className="flex items-center gap-1.5 text-xs"><Info size={12} />Thêm {notes} ghi chú về Refer hoặc nguyện vọng.</div>}
@@ -134,7 +135,7 @@ function EditDialog({ lesson, schoolId, initialDate, ctx, close }: { lesson?: Le
         }}>{lesson ? 'Lưu thay đổi' : 'Thêm ca'}</Button>
       </>}
     >
-      <div className="text-slate-600">{school?.fullName}</div>
+      <div className="text-slate-600"><EntityText text={school?.fullName ?? ''} /></div>
       <div className="flex flex-wrap gap-3">
         <Field label="Ngày"><select aria-label="Ngày" value={d.date} onChange={(e) => patch({ date: e.target.value })}>{dates.map((x) => <option key={x} value={x}>{dayLabel(x)}</option>)}</select></Field>
         <Field label="Bắt đầu"><input aria-label="Bắt đầu" type="time" value={d.start} onChange={(e) => patch({ start: e.target.value })} /></Field>

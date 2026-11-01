@@ -399,6 +399,15 @@ def main():
                                  "referSource": "derived"}
             l["schoolId"] = schools[name]["id"]
 
+    # Ghi rõ chặng đi tới trường nào: nếu chỉ dựa vào vị trí tiết, đổi ca đầu ngày sẽ làm mất số km đã ghi.
+    for w in weeks:
+        at = {}
+        for l in w["lessons"]:
+            owner = l["teacherId"] or l.get("originalTeacherId")
+            at.setdefault((owner, l["date"], l["session"], l["period"]), l["schoolId"])
+        for leg in w["legs"]:
+            leg["toSchoolId"] = at.get((leg["teacherId"], leg["date"], leg["session"], leg["period"]))
+
     # Workbook không có danh sách Refer: tạm suy ra từ GV dạy chính ổn định tại trường.
     # Đánh dấu referSource="derived" để giao diện yêu cầu Gaia xác nhận.
     counts = collections.Counter()

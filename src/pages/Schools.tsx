@@ -5,6 +5,7 @@ import clsx from 'clsx'
 import { SchoolsTable } from '../components/InfoTables'
 import { openNewSchoolDialog } from '../components/NewSchoolDialog'
 import { ViewSwitch } from '../components/InlineCell'
+import { CoverSuggestions } from '../components/CoverSuggestions'
 import { MovementPanel, type MovementSelection } from '../components/MovementPanel'
 import { WeekTimeGrid } from '../components/WeekTimeGrid'
 import { Badge, Button, Card, Empty, PageHeader } from '../components/ui'
@@ -104,6 +105,7 @@ function SchoolDetail({ school: s, ctx, issues, listToggle }: { school: School; 
           scrollToMap()
         }} />
       </Card>
+      <CoverSuggestions schoolId={s.id} ctx={ctx} />
       <div ref={panelRef} className="scroll-mt-2">
         <MovementPanel school={s} ctx={ctx} issues={issues} selection={selection} onSelect={setSelection} />
       </div>

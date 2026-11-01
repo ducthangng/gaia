@@ -43,6 +43,8 @@ export interface RecordedLeg {
   start: StartType
   km: number
   cost: number
+  /** Trường đến của chặng; bản lưu cũ có thể chưa có. */
+  toSchoolId?: string | null
 }
 
 export interface Week {

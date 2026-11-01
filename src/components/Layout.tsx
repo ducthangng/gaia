@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { ArchiveRestore, Bell, CalendarOff, Calculator, CalendarRange, Database, GraduationCap, LayoutDashboard, Lock, ScanLine, School, Settings, ShieldAlert, WandSparkles } from 'lucide-react'
+import { ArchiveRestore, Bell, CalendarOff, Calculator, CalendarRange, Database, GraduationCap, LayoutDashboard, Lock, ScanLine, RotateCcw, School, Settings, ShieldAlert, WandSparkles } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { shortDate } from '../domain/time'
 import { useActiveWeek, useStore } from '../store'
@@ -7,6 +7,8 @@ import { ISSUE_META } from '../domain/issues'
 import { useWeekContext, useWeekIssues } from '../hooks'
 import { LeaveDialog, openLeaveDialog } from './LeaveDialog'
 import { LessonEditor } from './LessonEditor'
+import { ReassignConfirm } from './CostExplanation'
+import { openResetDialog, ResetDataDialog } from './ResetDataDialog'
 import { NewSchoolDialog } from './NewSchoolDialog'
 import { TeacherProfileDialog } from './TeacherProfileDialog'
 import { Button, Toaster } from './ui'
@@ -48,6 +50,9 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
+        <button onClick={openResetDialog} data-testid="reset-data" className="mx-2 mb-1 flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left font-medium text-slate-600 hover:bg-slate-100">
+          <RotateCcw size={15} />Về dữ liệu mới nhất
+        </button>
         {anonymized && (
           <div className="m-2 flex gap-1.5 rounded-md bg-slate-100 p-2 text-xs text-slate-600">
             <ShieldAlert size={14} className="mt-0.5 shrink-0" />
@@ -80,6 +85,8 @@ export function Layout() {
       <LessonEditor />
       <TeacherProfileDialog />
       <NewSchoolDialog />
+      <ReassignConfirm />
+      <ResetDataDialog />
       <Toaster />
     </div>
   )

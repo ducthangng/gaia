@@ -5,7 +5,7 @@ import { rankCandidates } from './domain/recommend'
 import { buildContext, type World } from './domain/context'
 import { kmKey, routeForWeek } from './domain/route'
 import { addDays, weekDates } from './domain/time'
-import { DEFAULT_SETTINGS, needsTeacher, type Lesson, type Leave, type School, type Session, type Settings, type Teacher, type Week } from './domain/types'
+import { DEFAULT_SETTINGS, needsTeacher, type Lesson, type Leave, type School, type Session, type RecordedLeg, type Settings, type Teacher, type Week } from './domain/types'
 import { cloneWeek } from './domain/weeks'
 import { applyDraft, applyBulk, newLesson, type BulkAction, type BulkScope, type LessonDraft } from './domain/lesson-edit'
 import { applyLeave, applyLessonLeave, revertLeave, revertLessonLeave } from './domain/leave'
@@ -33,6 +33,7 @@ interface State extends World {
   applyBulkChange: (scope: BulkScope, action: BulkAction) => number
   undoLastEdit: () => void
   applySuggestion: (changes: Change[]) => void
+  replaceTeacher: (lessonId: string, teacherId: string) => void
   saveTeacherProfile: (id: string, draft: ProfileDraft) => void
   saveSchoolAddress: (id: string, address: string) => void
   addTeacher: (id: string, draft: ProfileDraft) => string
@@ -56,6 +57,9 @@ interface State extends World {
   applyRefer: (rows: { school: string; teacherId: string }[]) => { applied: number; unknown: string[] }
   updateSettings: (patch: Partial<Settings>) => void
   resetAll: () => void
+  /** Bản ngay trước khi đưa về dữ liệu mới nhất, chỉ giữ trong phiên để hoàn tác. */
+  beforeReset: Partial<State> | null
+  undoReset: () => void
 }
 
 const initial = () => ({
@@ -76,7 +80,9 @@ const normName = (s: string) => s.normalize('NFC').replace(/\s+/g, ' ').trim().t
 const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 const OFFICE_OF = (v: string | null) => (v && /phú mỹ/i.test(v) ? 'PM' : 'BR')
 
-const DATA_VERSION = 4
+const DATA_VERSION = 5
+/** Bản lưu cũ hơn số này thì bỏ và nạp lại từ seed; từ số này trở đi được nâng cấp, giữ nguyên chỉnh sửa. */
+const OLDEST_KEPT_VERSION = 4
 
 export const useStore = create<State>()(
   persist(
@@ -133,6 +139,12 @@ export const useStore = create<State>()(
             editWeek(weekId, () => next)
           }
           return changed
+        },
+        replaceTeacher: (lessonId, teacherId) => {
+          const week = weekOf(lessonId)
+          if (!week) return
+          snapshot(week.id, 'Đổi giáo viên')
+          get().assign(lessonId, teacherId)
         },
         applySuggestion: (changes) => {
           const weekId = get().activeWeekId
@@ -406,14 +418,29 @@ export const useStore = create<State>()(
         },
 
         updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
-        resetAll: () => set({ ...initial(), lastEdit: null }),
+        beforeReset: null,
+        resetAll: () => {
+          const { teachers, schools, offices, leaves, distances, weeks, settings, kmOverrides, activeWeekId, nextId } = get()
+          set({ ...initial(), lastEdit: null, beforeReset: { teachers, schools, offices, leaves, distances, weeks, settings, kmOverrides, activeWeekId, nextId } })
+        },
+        undoReset: () => {
+          const saved = get().beforeReset
+          if (saved) set({ ...saved, beforeReset: null })
+        },
       }
     },
     {
       name: 'gaia-scheduling',
       // Tăng số này khi muốn mọi trình duyệt bỏ dữ liệu đã sửa và nạp lại từ seed trong lần tải tiếp theo.
       version: DATA_VERSION,
-      migrate: () => ({}) as State,
+      migrate: (persisted, version) => {
+        if (version < OLDEST_KEPT_VERSION) return {} as State
+        // v5: thêm trường đến cho các chặng đã ghi, không đụng tới chỉnh sửa của người dùng.
+        const p = persisted as State
+        const key = (l: RecordedLeg) => `${l.teacherId}|${l.date}|${l.session}|${l.period}|${l.start}`
+        const known = new Map(seed.weeks.flatMap((w) => w.legs).map((l) => [key(l), l.toSchoolId]))
+        return { ...p, weeks: p.weeks.map((w) => ({ ...w, legs: w.legs.map((l) => ({ ...l, toSchoolId: l.toSchoolId ?? known.get(key(l)) ?? null })) })) }
+      },
       storage: createJSONStorage(() => localStorage),
       partialize: ({ teachers, schools, offices, leaves, distances, weeks, settings, kmOverrides, activeWeekId, nextId, anonymized }) => ({ teachers, schools, offices, leaves, distances, weeks, settings, kmOverrides, activeWeekId, nextId, anonymized }),
       // Bản lưu từ seed khác (ẩn danh <-> dữ liệu thật) thì bỏ, tránh lẫn dữ liệu.
@@ -441,7 +468,7 @@ function frozenLegs(week: Week, world: World): Week['legs'] {
 }
 
 function deriveFrozen(t: Teacher, date: string, week: Week, ctx: ReturnType<typeof buildContext>): Week['legs'] {
-  return routeForWeek(week, t, date, ctx).legs.map((l) => ({ teacherId: t.id, date, session: l.session, period: l.period, start: l.start, km: l.km, cost: l.cost }))
+  return routeForWeek(week, t, date, ctx).legs.map((l) => ({ teacherId: t.id, date, session: l.session, period: l.period, start: l.start, km: l.km, cost: l.cost, toSchoolId: l.toSchoolId }))
 }
 
 export const useWorld = (): World => {

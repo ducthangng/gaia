@@ -7,6 +7,7 @@ import { rankCandidates, type Candidate } from '../domain/recommend'
 import { dayLabel, money, SESSION_LABEL } from '../domain/time'
 import { prettyName } from '../domain/timetable'
 import { teacherLabel, type Lesson, type Teacher } from '../domain/types'
+import { openReassignConfirm } from './CostExplanation'
 import { openLeaveDialog } from './LeaveDialog'
 import { openLessonEditor } from './LessonEditor'
 import type { Ctx } from '../hooks'
@@ -182,9 +183,15 @@ function AssignPanel({ lesson: l, ctx, close, onShowOnMap, detailsOnly }: { less
           <ul className="min-h-0 flex-1 overflow-y-auto">
             {shown.map((c, i) => (
               <CandidateRow key={c.teacher.id} c={c} rank={i + 1} current={c.teacher.id === l.teacherId} onPick={() => {
+                close()
+                if (c.teacher.id === l.teacherId) return
+                // Có người đang hoặc từng dạy ca này thì xác nhận và giải thích chi phí trước khi đổi.
+                if (l.teacherId || l.originalTeacherId) {
+                  openReassignConfirm({ lessonId: l.id, teacherId: c.teacher.id })
+                  return
+                }
                 assign(l.id, c.teacher.id)
                 toast(`Đã phân công ${teacherLabel(c.teacher)}`)
-                close()
               }} />
             ))}
             {!shown.length && <li className="px-3 py-6 text-center text-slate-500">Không có giáo viên phù hợp. Bỏ chọn "Chỉ GV rảnh" để xem lý do từng người.</li>}

@@ -5,13 +5,16 @@ import { buildContext, type World } from './context'
 import { decodePlusCode, googleDirectionsUrl, haversineKm, isPrecise, parseLatLng, roadKm, wardOf } from './geo'
 import { movementTo } from './movement'
 import { applyChanges, MAX_LOAD_SHIFT, suggestOptimizations } from './optimize'
+import { coverOptions, openLessons } from './cover-plan'
+import { explainLessonChange, tierText } from './cost-explain'
+import { dataDiff } from './data-diff'
 import { createSchool, createTeacher, emptyProfile, nextTeacherId, schoolDraftErrors, schoolFullName, teacherIdError } from './create-records'
 import { rankCandidates } from './recommend'
 import { applySchoolAddress, missingSchoolFields, missingTeacherFields, parseCoordinate } from './data-quality'
 import { applyProfile, dropHomeKm, dropHomeLegs, locateAddress, profileErrors, profileFrom } from './teacher-profile'
-import { deriveRoute } from './route'
+import { deriveRoute, routeForWeek } from './route'
 import { axisHeight, axisY, buildAxis, hourRange, isMorning, layoutDay, prettyName, sessionBands } from './timetable'
-import { applyBulk, applyDraft, draftErrors, draftFrom, inScope, newLesson, type BulkScope } from './lesson-edit'
+import { applyBulk, applyDraft, draftErrors, draftFrom, inScope, newLesson, reassign, type BulkScope } from './lesson-edit'
 import { healthOf, issueScore, newIssues, schoolLoad, touchesSchool, weekIssues } from './issues'
 import { affectedByLeave, applyLeave, applyLessonLeave, revertLeave, revertLessonLeave } from './leave'
 import { DEFAULT_SETTINGS, teacherLabel, type GeoPoint, type Lesson, type Seed, type Teacher } from './types'
@@ -602,5 +605,258 @@ describe('phân biệt sáng và chiều trên lịch', () => {
     const bands = sessionBands(buildAxis([am, { startMin: 10 * 60, endMin: 10 * 60 + 35 }]))
     expect(bands.map((b) => b.session)).toEqual(['AM'])
     expect(bands[0].to).toBe(10 * 60 + 45)
+  })
+})
+
+describe('giải thích chi phí khi đổi giáo viên', () => {
+  const [a, b] = seed.schools.filter((s) => isPrecise(s.geo))
+  const A = teacher({ id: 'A', name: 'Cô A', officeId: 'BR' })
+  const B = teacher({ id: 'B', name: 'Cô B', officeId: 'BR' })
+  const dist = { home: { [`A|${a.id}`]: 20, [`B|${a.id}`]: 13, [`B|${b.id}`]: 30 }, office: { [`BR|${a.id}`]: 18 }, pair: { [[a.id, b.id].sort().join('|')]: 8 } }
+  const ctxOf = (lessons: Lesson[], legs: typeof week.legs = []) => buildContext({ ...week, lessons, legs }, { ...world, teachers: [...world.teachers, A, B], distances: dist })
+  const am = lesson({ id: 'x', teacherId: 'A', schoolId: a.id })
+  const texts = (r: ReturnType<typeof explainLessonChange>, id: string) => r.changes.find((c) => c.teacherId === id)!.reasons.join(' ')
+
+  it('giảm: giáo viên mới ở gần hơn thuộc bậc rẻ hơn', () => {
+    const r = explainLessonChange(am, reassign(am, 'B'), ctxOf([am]))
+    expect(r.changes.find((c) => c.teacherId === 'A')!.delta).toBe(-40000)
+    expect(r.changes.find((c) => c.teacherId === 'B')!.delta).toBe(30000)
+    expect(r).toMatchObject({ total: -10000, verdict: 'down' })
+    expect(texts(r, 'A')).toContain('giảm 40.000đ')
+    expect(texts(r, 'B')).toContain('bậc 12–18 km: 30.000đ')
+  })
+  it('tăng: người mới phải đi thêm chặng giữa hai trường', () => {
+    const other = lesson({ id: 'y', teacherId: 'B', schoolId: b.id, start: '06:00', end: '06:35' })
+    const c = ctxOf([am, other])
+    const stay = lesson({ id: 'z', teacherId: 'A', schoolId: a.id, start: '09:00', end: '09:35', className: '2A' })
+    const r = explainLessonChange(stay, reassign(stay, 'B'), ctxOf([am, stay, other]))
+    expect(c.week.lessons).toHaveLength(2)
+    expect(r.changes.find((x) => x.teacherId === 'A')!.delta).toBe(0)
+    expect(texts(r, 'A')).toContain('vẫn còn ca khác')
+    expect(r.verdict).toBe('up')
+    expect(texts(r, 'B')).toContain('Thêm chặng')
+  })
+  it('giữ nguyên: người mới đã có ca tại trường, người cũ vẫn còn ca', () => {
+    const mine = lesson({ id: 'm', teacherId: 'A', schoolId: a.id, start: '09:00', end: '09:35', className: '2A' })
+    const hers = lesson({ id: 'h', teacherId: 'B', schoolId: a.id, start: '07:30', end: '08:05', className: '3A' })
+    const r = explainLessonChange(mine, reassign(mine, 'B'), ctxOf([am, mine, hers]))
+    expect(r).toMatchObject({ total: 0, verdict: 'same' })
+    expect(texts(r, 'B')).toContain('đã có ca khác')
+    expect(r.summary).toContain('Không ai')
+  })
+  it('giữ nguyên do bù trừ: nói rõ hai bên ngược chiều', () => {
+    const dist2 = { home: { [`A|${a.id}`]: 13, [`B|${a.id}`]: 13 }, office: {}, pair: {} }
+    const r = explainLessonChange(am, reassign(am, 'B'), buildContext({ ...week, lessons: [am], legs: [] }, { ...world, teachers: [...world.teachers, A, B], distances: dist2 }))
+    expect(r).toMatchObject({ total: 0, verdict: 'same' })
+    expect(r.summary).toContain('bù trừ')
+  })
+  it('nói rõ khi điểm xuất phát đổi giữa nhà và văn phòng', () => {
+    const morning = lesson({ id: 'm', teacherId: 'A', schoolId: a.id })
+    const afternoon = lesson({ id: 'p', teacherId: 'A', schoolId: a.id, session: 'PM', start: '14:00', end: '14:35', className: '2A' })
+    const r = explainLessonChange(morning, reassign(morning, 'B'), ctxOf([morning, afternoon]))
+    expect(texts(r, 'A')).toContain('xuất phát từ văn phòng')
+  })
+  it('dưới bậc thấp nhất thì nói không tính tiền', () => {
+    expect(tierText('N', 8, DEFAULT_SETTINGS)).toBe('dưới 12 km nên không tính tiền')
+    expect(tierText('V', 30, DEFAULT_SETTINGS)).toBe('bậc từ 30 km trở lên: 110.000đ')
+  })
+  it('ca chưa có người nhận thì chỉ tính người mới', () => {
+    const open = lesson({ id: 'o', teacherId: null, originalTeacherId: 'A', status: 'needs_cover', schoolId: a.id })
+    const r = explainLessonChange(open, reassign(open, 'B'), ctxOf([open]))
+    expect(r.changes.map((c) => c.teacherId)).toEqual(['B'])
+  })
+  it('đổi ngày tính cả ngày cũ và ngày mới của cùng giáo viên', () => {
+    const later = applyDraft(am, { ...draftFrom(am), date: '2026-11-03' })
+    const r = explainLessonChange(am, later, ctxOf([am]))
+    expect(r.changes.map((c) => c.date).sort()).toEqual(['2026-11-02', '2026-11-03'])
+    expect(r.total).toBe(0)
+  })
+  it('số giải thích khớp đúng chênh lệch bảng chi phí trên lịch thật, và khớp số ở dropdown', () => {
+    const ctx = buildContext(week, world)
+    const samples = week.lessons.filter((l) => l.status === 'assigned' && l.teacherId && l.code === 'S').filter((_, i) => i % 7 === 0).slice(0, 25)
+    for (const l of samples) {
+      for (const cand of rankCandidates({ ...l, teacherId: null, status: 'needs_cover' }, ctx).filter((c) => c.available).slice(0, 2)) {
+        const r = explainLessonChange(l, reassign(l, cand.teacher.id), ctx)
+        const nextWeek = { ...week, lessons: week.lessons.map((x) => (x.id === l.id ? reassign(x, cand.teacher.id) : x)) }
+        const c2 = buildContext(nextWeek, world)
+        const costOf = (w: typeof week, c: typeof ctx, id: string) => routeForWeek(w, c.teacherById.get(id)!, l.date, c).cost
+        const real = [l.teacherId!, cand.teacher.id].reduce((s, id) => s + costOf(nextWeek, c2, id) - costOf(week, ctx, id), 0)
+        expect(r.total, `${l.id} -> ${cand.teacher.id}`).toBe(real)
+        expect(r.changes.find((x) => x.teacherId === cand.teacher.id)!.delta).toBe(cand.extraCost)
+      }
+    }
+  })
+})
+
+describe('so dữ liệu hiện tại với bản mới nhất', () => {
+  const base = { teachers: seed.teachers, schools: seed.schools, leaves: seed.leaves, weeks: seed.weeks, kmOverrides: {}, settings: DEFAULT_SETTINGS, distances: seed.distances }
+  it('chưa sửa gì thì không có khác biệt', () => {
+    expect(dataDiff(base, seed, DEFAULT_SETTINGS)).toEqual([])
+  })
+  it('liệt kê đúng từng loại thay đổi', () => {
+    const w = seed.weeks.at(-1)!
+    const changed = {
+      ...base,
+      teachers: [...seed.teachers.map((t) => (t.id === 'VT001' ? { ...t, phone: '0901234567' } : t)), teacher({ id: 'VT999', isNew: true })],
+      schools: seed.schools.slice(1),
+      leaves: seed.leaves.slice(2),
+      weeks: [...seed.weeks.map((x) => (x.id === w.id ? { ...x, lessons: x.lessons.map((l, i) => (i < 3 ? { ...l, teacherId: 'VT001' } : l)).slice(1) } : x)), { ...w, id: '2026-11-09' }],
+      kmOverrides: { a: 1 },
+      settings: { ...DEFAULT_SETTINGS, ratePerKm: 1 },
+    }
+    const text = dataDiff(changed, seed, DEFAULT_SETTINGS).join(' | ')
+    expect(text).toContain('1 giáo viên thêm mới')
+    expect(text).toContain('1 giáo viên đã sửa')
+    expect(text).toContain('1 trường bị thiếu')
+    expect(text).toContain('1 tuần tạo thêm')
+    expect(text).toContain('lịch tuần')
+    expect(text).toContain('2 ngày nghỉ')
+    expect(text).toContain('1 số km sửa tay')
+    expect(text).toContain('Cấu hình')
+  })
+})
+
+describe('số km đã ghi không phụ thuộc vị trí tiết', () => {
+  const [a] = seed.schools.filter((s) => isPrecise(s.geo))
+  const T = teacher({ id: 'T', name: 'T', homeGeo: undefined })
+  const leg = { teacherId: 'T', date: '2026-11-02', session: 'AM' as const, period: 1, start: 'N' as const, km: 20, cost: 40000, toSchoolId: a.id }
+  const ctx = buildContext({ ...week, lessons: [], legs: [leg] }, { ...world, teachers: [...world.teachers, T] })
+  it('bỏ ca đầu ngày nhưng vẫn tới cùng trường thì quãng đường và tiền không đổi', () => {
+    const later = lesson({ id: 'b', schoolId: a.id, period: 3, start: '09:00', end: '09:35' })
+    const r = deriveRoute(T, '2026-11-02', [later], week.id, [leg], ctx)
+    expect(r.legs[0]).toMatchObject({ km: 20, source: 'recorded', cost: 40000 })
+  })
+  it('đi tới trường khác thì không dùng số km của trường cũ', () => {
+    const other = seed.schools.find((s) => s.id !== a.id)!
+    const r = deriveRoute(T, '2026-11-02', [lesson({ id: 'b', schoolId: other.id })], week.id, [leg], ctx)
+    expect(r.legs[0].source).not.toBe('recorded')
+  })
+  it('bản lưu cũ chưa có trường đến vẫn khớp theo vị trí tiết', () => {
+    const { toSchoolId: _, ...old } = leg
+    const r = deriveRoute(T, '2026-11-02', [lesson({ id: 'b', schoolId: a.id })], week.id, [old], ctx)
+    expect(r.legs[0].km).toBe(20)
+  })
+  it('seed đã có trường đến cho gần như mọi chặng', () => {
+    const legs = seed.weeks.flatMap((w) => w.legs)
+    expect(legs.filter((l) => l.toSchoolId).length / legs.length).toBeGreaterThan(0.95)
+  })
+})
+
+describe('gợi ý xếp ca trống của trường', () => {
+  const schoolId = 'th-quang-trung-phu-my'
+  // Tạo ca trống thật: chuyển mọi ca của một GV tại trường sang cần người thay.
+  const vacate = (teacherId: string, filter: (l: Lesson) => boolean = () => true) => ({
+    ...week,
+    lessons: week.lessons.map((l) => (l.schoolId === schoolId && l.teacherId === teacherId && l.status === 'assigned' && filter(l) ? { ...l, teacherId: null, originalTeacherId: teacherId, status: 'needs_cover' as const } : l)),
+  })
+  const costOfWeek = (w: typeof week, ctx: ReturnType<typeof buildContext>) => world.teachers.reduce((s, t) => s + weekDatesOf(w.startDate).reduce((x, d) => x + routeForWeek(w, t, d, ctx).cost, 0), 0)
+  const owner = week.lessons.find((l) => l.schoolId === schoolId && l.status === 'assigned' && l.code === 'S')!.teacherId!
+  const tue = (l: Lesson) => l.date === '2026-11-03'
+  const w = vacate(owner, tue)
+  const ctx = buildContext(w, world)
+  const opts = coverOptions(schoolId, ctx)
+
+  it('không có ca trống thì không có gợi ý', () => {
+    expect(coverOptions(schoolId, buildContext(week, world)).plans).toEqual([])
+  })
+  it('có đủ ca trống và đều có phương án', () => {
+    expect(opts.open.length).toBeGreaterThan(1)
+    expect(opts.plans.length).toBeGreaterThan(0)
+    expect(new Set(opts.plans.flatMap((p) => p.goals))).toEqual(new Set(['fewest', 'cheapest', 'best-fit']))
+  })
+  it('mỗi phương án xếp mỗi ca đúng một lần', () => {
+    for (const p of [...opts.plans, ...opts.soloPlans]) {
+      const ids = p.changes.map((c) => c.lessonId)
+      expect(new Set(ids).size).toBe(ids.length)
+      expect([...ids, ...p.uncovered.map((l) => l.id)].sort()).toEqual(opts.open.map((l) => l.id).sort())
+    }
+  })
+  it('áp dụng không phát sinh trùng lịch hay không kịp, và số tiền khớp bảng chi phí', () => {
+    const before = weekIssues(ctx)
+    for (const p of [...opts.plans, ...opts.soloPlans]) {
+      const after = { ...w, lessons: applyChanges(w.lessons, p.changes) }
+      const c2 = buildContext(after, world)
+      expect(newIssues(before, weekIssues(c2)).filter((i) => ['overlap', 'travel', 'leave'].includes(i.kind))).toEqual([])
+      expect(costOfWeek(after, c2) - costOfWeek(w, ctx)).toBe(p.extraCost)
+    }
+  })
+  it('đúng thứ bậc: phương án ít người không nhiều người hơn, phương án rẻ không đắt hơn', () => {
+    const covered = opts.plans.filter((p) => !p.uncovered.length)
+    const fewest = covered.find((p) => p.goals.includes('fewest'))!
+    const cheapest = covered.find((p) => p.goals.includes('cheapest'))!
+    for (const p of covered) {
+      expect(fewest.shares.length).toBeLessThanOrEqual(p.shares.length)
+      expect(cheapest.extraCost).toBeLessThanOrEqual(p.extraCost)
+    }
+    for (const p of opts.soloPlans) expect(cheapest.extraCost).toBeLessThanOrEqual(p.extraCost)
+    if (opts.soloPlans.length) expect(fewest.shares.length).toBe(1)
+  })
+  it('nhãn luôn đúng khi nhiều giáo viên cùng nghỉ: không phương án nào rẻ hơn "tiết kiệm nhất" hay ít người hơn "ít giáo viên nhất"', () => {
+    const owners = [...new Set(week.lessons.filter((l) => l.schoolId === schoolId && l.teacherId && tue(l)).map((l) => l.teacherId!))]
+    for (const n of [1, 2, 3, owners.length]) {
+      const gone = new Set(owners.slice(0, n))
+      const wk = { ...week, lessons: week.lessons.map((l) => (l.schoolId === schoolId && tue(l) && l.teacherId && gone.has(l.teacherId) && l.status === 'assigned' ? { ...l, teacherId: null, originalTeacherId: l.teacherId, status: 'needs_cover' as const } : l)) }
+      const r = coverOptions(schoolId, buildContext(wk, world))
+      const all = [...r.plans, ...r.soloPlans]
+      const covered = all.filter((p) => !p.uncovered.length)
+      const of = (g: 'fewest' | 'cheapest' | 'best-fit') => r.plans.find((p) => p.goals.includes(g))!
+      expect(new Set(r.plans.flatMap((p) => p.goals)).size).toBe(3)
+      if (covered.length) {
+        expect(of('cheapest').uncovered).toEqual([])
+        for (const p of covered) {
+          expect(of('cheapest').extraCost, `n=${n}`).toBeLessThanOrEqual(p.extraCost)
+          expect(of('fewest').shares.length, `n=${n}`).toBeLessThanOrEqual(p.shares.length)
+        }
+      }
+    }
+  })
+  it('giáo viên nhận hết danh sách là một người, rẻ trước; không có GV gốc, online, quản lý', () => {
+    expect(opts.soloPlans.every((p) => p.shares.length === 1 && p.uncovered.length === 0)).toBe(true)
+    const costs = opts.soloPlans.map((p) => p.extraCost)
+    expect(costs).toEqual([...costs].sort((a, b) => a - b))
+    for (const p of [...opts.plans, ...opts.soloPlans]) {
+      for (const s of p.shares) {
+        const t = ctx.teacherById.get(s.teacherId)!
+        expect(t.id).not.toBe(owner)
+        expect(t.onlineOnly || t.isManager).toBe(false)
+      }
+    }
+  })
+  it('hai ca trùng giờ thì không một người nào nhận hết, cần ít nhất hai người', () => {
+    const [a] = seed.schools.filter((s) => s.geo)
+    const x = lesson({ id: 'p1', teacherId: null, status: 'needs_cover', schoolId: a.id, className: '1A' })
+    const y = lesson({ id: 'p2', teacherId: null, status: 'needs_cover', schoolId: a.id, className: '1B' })
+    const r = coverOptions(a.id, buildContext({ ...week, lessons: [x, y], legs: [] }, world))
+    expect(r.soloPlans).toEqual([])
+    expect(r.plans.find((p) => p.goals.includes('fewest'))!.shares.length).toBe(2)
+  })
+  it('kết quả tối ưu với bài nhỏ: khớp vét cạn về chi phí', () => {
+    const [a] = seed.schools.filter((s) => isPrecise(s.geo))
+    const lessons = [
+      lesson({ id: 'q1', teacherId: null, status: 'needs_cover', schoolId: a.id, className: '1A' }),
+      lesson({ id: 'q2', teacherId: null, status: 'needs_cover', schoolId: a.id, className: '1B', start: '09:00', end: '09:35' }),
+      lesson({ id: 'q3', teacherId: null, status: 'needs_cover', schoolId: a.id, className: '1C', session: 'PM', start: '14:00', end: '14:35' }),
+    ]
+    const c = buildContext({ ...week, lessons, legs: [] }, world)
+    const r = coverOptions(a.id, c)
+    const teachersOk = world.teachers.filter((t) => t.active && !t.isManager && !t.onlineOnly).slice(0, 12)
+    let best = Infinity
+    for (const t1 of teachersOk) for (const t2 of teachersOk) for (const t3 of teachersOk) {
+      const cost = [t1, t2, t3].filter((t, i, arr) => arr.indexOf(t) === i).reduce((s, t) => {
+        const mine = lessons.filter((_, i) => [t1, t2, t3][i] === t).map((l) => ({ ...l, teacherId: t.id, status: 'assigned' as const }))
+        return s + deriveRoute(t, '2026-11-02', mine, week.id, [], c).cost
+      }, 0)
+      best = Math.min(best, cost)
+    }
+    const cheapest = r.plans.find((p) => p.goals.includes('cheapest'))!
+    expect(cheapest.extraCost).toBeLessThanOrEqual(best)
+  })
+  it('trường đông ca bị trống nhiều vẫn chạy đủ nhanh', () => {
+    const big = { ...week, lessons: week.lessons.map((l) => (l.schoolId === schoolId && l.status === 'assigned' ? { ...l, teacherId: null, originalTeacherId: l.teacherId, status: 'needs_cover' as const } : l)) }
+    const c = buildContext(big, world)
+    expect(openLessons(c, schoolId).length).toBeGreaterThan(60)
+    const t0 = Date.now()
+    coverOptions(schoolId, c)
+    expect(Date.now() - t0).toBeLessThan(5000)
   })
 })

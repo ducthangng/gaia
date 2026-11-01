@@ -86,7 +86,8 @@ export function deriveRoute(
         ? ctx.book.fromHome(teacher.id, l.schoolId)
         : ctx.book.fromOffice(teacher.officeId, l.schoolId)
       : ctx.book.between(current!, l.schoolId)
-    const rec = recorded.find((r) => r.session === l.session && r.period === l.period && r.start === start)
+    // Khớp theo trường đến: bỏ ca đầu ngày không làm quãng đường từ nhà tới trường thay đổi.
+    const rec = recorded.find((r) => r.start === start && (r.toSchoolId ? r.toSchoolId === l.schoolId : r.session === l.session && r.period === l.period))
     const manual = ctx.kmOverrides[kmKey(weekId, teacher.id, date, l.schoolId)]
     const km = manual ?? rec?.km ?? base.km
     const source: KmSource = manual !== undefined ? 'manual' : rec ? 'recorded' : base.source

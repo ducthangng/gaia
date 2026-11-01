@@ -1,4 +1,5 @@
 import { RotateCcw } from 'lucide-react'
+import { openResetDialog } from '../components/ResetDataDialog'
 import { Badge, Button, Card, PageHeader, toast } from '../components/ui'
 import { DEFAULT_SETTINGS, type Settings, type Tier } from '../domain/types'
 import { useStore } from '../store'
@@ -45,7 +46,6 @@ function TierTable({ title, tiers, onChange }: { title: string; tiers: Tier[]; o
 export function SettingsPage() {
   const settings = useStore((s) => s.settings)
   const update = useStore((s) => s.updateSettings)
-  const resetAll = useStore((s) => s.resetAll)
   const totalWeight = Object.values(settings.weights).reduce((a, b) => a + b, 0)
   return (
     <div className="mx-auto max-w-[1000px] space-y-4">
@@ -98,7 +98,7 @@ export function SettingsPage() {
       </div>
       <div className="flex gap-2">
         <Button onClick={() => { update(DEFAULT_SETTINGS); toast('Đã khôi phục cấu hình mặc định') }}><RotateCcw size={13} />Khôi phục cấu hình mặc định</Button>
-        <Button variant="danger" onClick={() => { if (window.confirm('Xoá toàn bộ chỉnh sửa trên trình duyệt này và nạp lại dữ liệu gốc?')) { resetAll(); toast('Đã nạp lại dữ liệu gốc') } }}>Nạp lại dữ liệu gốc</Button>
+<Button variant="danger" onClick={openResetDialog}>Về dữ liệu mới nhất</Button>
       </div>
     </div>
   )

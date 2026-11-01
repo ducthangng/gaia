@@ -59,8 +59,10 @@ export function evaluate(t: Teacher, l: Lesson, ctx: WeekContext): Candidate {
     w.preference * (violations.length ? 0 : 1) +
     w.availability * (blocks.length ? 0 : 1) +
     w.subject * (taughtSubject ? 1 : 0)
-  const before = deriveRoute(t, l.date, day, ctx.week.id, [], ctx).cost
-  const after = deriveRoute(t, l.date, [...day.filter((x) => x.id !== l.id), { ...l, teacherId: t.id, status: 'assigned' }], ctx.week.id, [], ctx).cost
+  // Cùng các chặng đã ghi như bảng chi phí, để số này khớp với số thấy được sau khi đổi.
+  const recorded = ctx.week.legs.filter((r) => r.teacherId === t.id && r.date === l.date)
+  const before = deriveRoute(t, l.date, day, ctx.week.id, recorded, ctx).cost
+  const after = deriveRoute(t, l.date, [...day.filter((x) => x.id !== l.id), { ...l, teacherId: t.id, status: 'assigned' }], ctx.week.id, recorded, ctx).cost
   return {
     teacher: t,
     score: total ? Math.round((raw / total) * 100) : 0,

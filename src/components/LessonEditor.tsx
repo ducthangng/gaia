@@ -2,6 +2,8 @@ import { AlertTriangle, CalendarClock, Check, Info, Trash2, X } from 'lucide-rea
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
 import { blockerLabel } from '../domain/constraints'
+import { explainLessonChange } from '../domain/cost-explain'
+import { CostExplanationView } from './CostExplanation'
 import { ISSUE_META, newIssues, weekIssues, type Issue } from '../domain/issues'
 import { applyBulk, applyDraft, draftErrors, draftFrom, newLesson, type BulkAction, type BulkScope, type LessonDraft } from '../domain/lesson-edit'
 import { evaluate } from '../domain/recommend'
@@ -159,7 +161,10 @@ function EditDialog({ lesson, schoolId, initialDate, ctx, close }: { lesson?: Le
       </Field>
       {errors.length > 0
         ? <div className="rounded-md bg-red-50 px-3 py-2 text-red-800" data-testid="edit-errors">{errors.join('. ')}.</div>
-        : dirty && <ImpactNotice fresh={fresh} ctx={ctx} />}
+        : dirty && <>
+          <ImpactNotice fresh={fresh} ctx={ctx} />
+          {hypothetical && <CostExplanationView explanation={explainLessonChange(lesson ?? null, hypothetical, ctx)} ctx={ctx} />}
+        </>}
     </Modal>
   )
 }

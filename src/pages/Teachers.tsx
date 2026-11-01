@@ -1,12 +1,13 @@
 import clsx from 'clsx'
-import { ArrowRight, FileDown, Home, MapPin, Phone, Plus, Trash2 } from 'lucide-react'
+import { ArrowRight, CalendarOff, FileDown, Home, MapPin, Phone, Plus, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
+import { openLeaveDialog } from '../components/LeaveDialog'
 import { LessonChip } from '../components/LessonChip'
-import { Badge, Button, Card, Empty, PageHeader, Stat, toast } from '../components/ui'
+import { Badge, Button, Card, Empty, PageHeader, Stat } from '../components/ui'
 import { byTime, routeForWeek, tally, type RouteLeg } from '../domain/route'
 import { DAY_LABELS, dayLabel, money, SESSION_LABEL, weekDates } from '../domain/time'
-import type { Gender, Preference, Session, Teacher } from '../domain/types'
+import { teacherLabel, type Gender, type Preference, type Session, type Teacher } from '../domain/types'
 import { useWeekContext, weekCosts, type Ctx } from '../hooks'
 import { exportTeacherSchedule } from '../services/exports'
 import { useStore } from '../store'
@@ -28,8 +29,8 @@ export function TeachersPage() {
         <nav className="min-h-0 flex-1 overflow-y-auto p-1">
           {list.map((t) => (
             <NavLink key={t.id} to={`/teachers/${t.id}`} className={clsx('block rounded px-2 py-1.5', t.id === teacher?.id ? 'bg-emerald-50 text-emerald-900' : 'hover:bg-slate-100')}>
-              <div className="flex items-center justify-between gap-2"><span className="truncate font-medium">{t.name}</span><span className="tnum text-xs text-slate-500">{count(t.id)}</span></div>
-              <div className="truncate text-xs text-slate-500">{t.id}{t.district ? ` · ${t.district}` : ''}</div>
+              <div className="flex items-center justify-between gap-2"><span className="truncate font-medium">{teacherLabel(t)}</span><span className="tnum text-xs text-slate-500">{count(t.id)}</span></div>
+              <div className="truncate text-xs text-slate-500">{t.district ?? 'Chưa rõ khu vực'}</div>
             </NavLink>
           ))}
         </nav>
@@ -40,6 +41,7 @@ export function TeachersPage() {
 }
 
 function TeacherDetail({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
+  const allLeaves = useStore((s) => s.leaves)
   const lessons = ctx.week.lessons.filter((l) => l.teacherId === t.id)
   const dates = weekDates(ctx.week.startDate)
   const routes = dates.map((d) => routeForWeek(ctx.week, t, d, ctx))
@@ -50,16 +52,18 @@ function TeacherDetail({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
   return (
     <div className="min-w-0 space-y-4 overflow-y-auto">
       <PageHeader
-        title={t.name}
+        title={teacherLabel(t)}
         subtitle={<span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span>{t.id}</span>
           {t.phone && <span className="inline-flex items-center gap-1"><Phone size={12} />{t.phone}</span>}
           <span className="inline-flex items-center gap-1"><MapPin size={12} />{t.address ?? t.district ?? 'Chưa có địa chỉ'}</span>
           <Badge>{ctx.officeName(t.officeId)}</Badge>
           {t.track && <Badge tone="blue">{t.track}</Badge>}
           {t.isCollaborator && <Badge tone="violet">Cộng tác viên</Badge>}
+          {t.onlineOnly && <Badge tone="amber">Chỉ làm online</Badge>}
+          {t.areas.length > 0 && <span title="Khu vực giáo viên đăng ký dạy">Khu vực: {t.areas.join(', ')}</span>}
         </span>}
         actions={<>
+          <Button variant="primary" onClick={() => openLeaveDialog({ teacherId: t.id })}><CalendarOff size={14} />Xin nghỉ</Button>
           <Button onClick={() => exportTeacherSchedule(ctx, t.id)}><FileDown size={14} />Excel</Button>
           <Button onClick={() => window.open(`/print/teacher/${t.id}`, '_blank')}><FileDown size={14} />PDF</Button>
         </>}
@@ -75,7 +79,8 @@ function TeacherDetail({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
           {dates.map((d, i) => {
             const day = lessons.filter((l) => l.date === d).sort(byTime)
             const r = routes[i]
-            if (!day.length && !r.legs.length) return null
+            const dayLeaves = allLeaves.filter((x) => x.teacherId === t.id && x.date === d)
+            if (!day.length && !r.legs.length && !dayLeaves.length) return null
             return (
               <div key={d} className="px-4 py-3">
                 <div className="mb-2 flex flex-wrap items-center gap-x-1.5 gap-y-1">
@@ -85,7 +90,11 @@ function TeacherDetail({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
                     <ArrowRight size={13} className="text-slate-400" />
                     <span className="inline-flex items-center gap-1 text-slate-500" title="Chặng về nhà: tính vào tổng lộ trình, biểu giá theo bậc không trả tiền chặng này"><Home size={12} />{r.returnKm} km</span>
                   </>}
-                  <span className="tnum ml-auto font-semibold">{money(r.cost)}</span>
+                  {dayLeaves.map((x) => <Badge key={x.id} tone="red"><CalendarOff size={10} />{SESSION_LABEL[x.session]}: {x.note}</Badge>)}
+                  <span className="ml-auto flex items-center gap-3">
+                    {ctx.week.status === 'planning' && day.length > 0 && <Button variant="ghost" className="!py-0.5 text-xs" onClick={() => openLeaveDialog({ teacherId: t.id, date: d })}><CalendarOff size={12} />Xin nghỉ ngày này</Button>}
+                    <span className="tnum font-semibold">{money(r.cost)}</span>
+                  </span>
                 </div>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(145px,1fr))] gap-1.5">
                   {day.map((l) => <LessonChip key={l.id} lesson={l} ctx={ctx} show="school" />)}
@@ -193,40 +202,19 @@ function PreferencesCard({ teacher: t }: { teacher: Teacher }) {
 
 function LeaveCard({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
   const leaves = useStore((s) => s.leaves)
-  const addLeave = useStore((s) => s.addLeave)
   const removeLeave = useStore((s) => s.removeLeave)
-  const [from, setFrom] = useState(ctx.week.startDate)
-  const [to, setTo] = useState(ctx.week.startDate)
-  const [session, setSession] = useState<Session | 'ALL'>('ALL')
-  const [note, setNote] = useState('')
   const mine = leaves.filter((l) => l.teacherId === t.id && l.date >= ctx.week.startDate).sort((a, b) => a.date.localeCompare(b.date))
   return (
-    <Card title="Nghỉ phép">
-      <div className="space-y-3 p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <input aria-label="Từ ngày" type="date" value={from} onChange={(e) => { setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value) }} />
-          <span className="text-slate-400">→</span>
-          <input aria-label="Đến ngày" type="date" min={from} value={to} onChange={(e) => setTo(e.target.value)} />
-          <select aria-label="Buổi nghỉ" value={session} onChange={(e) => setSession(e.target.value as Session | 'ALL')}>
-            <option value="ALL">Cả ngày</option><option value="AM">Sáng</option><option value="PM">Chiều</option>
-          </select>
-          <input aria-label="Lý do nghỉ" className="w-32" placeholder="Lý do" value={note} onChange={(e) => setNote(e.target.value)} />
-          <Button onClick={() => {
-            const n = addLeave(t.id, from, to, session, note)
-            setNote('')
-            toast(n ? `Đã khoá lịch. ${n} ca chuyển sang cần dạy thay` : 'Đã khoá lịch, không có ca nào bị ảnh hưởng')
-          }}><Plus size={13} />Đăng ký</Button>
-        </div>
-        <ul className="max-h-44 space-y-1 overflow-y-auto">
-          {mine.map((l) => (
-            <li key={l.id} className="flex items-center justify-between rounded bg-slate-50 px-2 py-1">
-              <span>{dayLabel(l.date)} · {SESSION_LABEL[l.session]} · {l.note}</span>
-              <button aria-label="Xoá ngày nghỉ" className="text-slate-400 hover:text-red-600" onClick={() => removeLeave(l.id)}><Trash2 size={13} /></button>
-            </li>
-          ))}
-          {!mine.length && <li className="text-slate-500">Không có ngày nghỉ từ tuần này trở đi.</li>}
-        </ul>
-      </div>
+    <Card title="Lịch nghỉ đã đăng ký" actions={<Button className="!py-1 text-xs" onClick={() => openLeaveDialog({ teacherId: t.id })}><Plus size={13} />Thêm</Button>}>
+      <ul className="max-h-56 space-y-1 overflow-y-auto p-4">
+        {mine.map((l) => (
+          <li key={l.id} className="flex items-center justify-between rounded bg-slate-50 px-2 py-1">
+            <span>{dayLabel(l.date)} · {SESSION_LABEL[l.session]} · {l.note}</span>
+            <button aria-label="Huỷ ngày nghỉ" title="Huỷ nghỉ: các ca chưa có người thay sẽ trả về giáo viên này" className="text-slate-400 hover:text-red-600" onClick={() => removeLeave(l.id)}><Trash2 size={13} /></button>
+          </li>
+        ))}
+        {!mine.length && <li className="text-slate-500">Không có ngày nghỉ từ tuần này trở đi.</li>}
+      </ul>
     </Card>
   )
 }

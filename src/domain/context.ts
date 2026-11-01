@@ -34,7 +34,7 @@ export function buildContext(week: Week, world: World): WeekContext {
   return {
     week,
     world,
-    book: new DistanceBook(world.distances, world.teachers, world.schools),
+    book: new DistanceBook(world.distances, world.teachers, world.schools, world.offices),
     settings: world.settings,
     kmOverrides: world.kmOverrides,
     officeName: (id) => offices.get(id) ?? 'Văn phòng',

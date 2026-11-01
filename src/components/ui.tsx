@@ -54,7 +54,7 @@ export function Stat({ label, value, hint, tone }: { label: string; value: React
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
       <div className="text-xs text-slate-500">{label}</div>
-      <div className={clsx('tnum mt-1 text-2xl font-semibold tracking-tight', tone === 'critical' && 'text-red-700', tone === 'warning' && 'text-amber-700')}>{value}</div>
+      <div className={clsx('tnum mt-1 text-xl font-semibold tracking-tight', tone === 'critical' && 'text-red-700', tone === 'warning' && 'text-amber-700')}>{value}</div>
       {hint && <div className="mt-0.5 text-xs text-slate-500">{hint}</div>}
     </div>
   )

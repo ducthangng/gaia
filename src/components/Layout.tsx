@@ -1,12 +1,16 @@
 import clsx from 'clsx'
-import { ArchiveRestore, Calculator, CalendarRange, Database, GraduationCap, LayoutDashboard, Lock, ScanLine, School, Settings, ShieldAlert } from 'lucide-react'
+import { ArchiveRestore, Bell, CalendarOff, Calculator, CalendarRange, Database, GraduationCap, LayoutDashboard, Lock, ScanLine, School, Settings, ShieldAlert } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { shortDate } from '../domain/time'
 import { useActiveWeek, useStore } from '../store'
-import { Toaster } from './ui'
+import { ISSUE_META } from '../domain/issues'
+import { useWeekContext, useWeekIssues } from '../hooks'
+import { LeaveDialog, openLeaveDialog } from './LeaveDialog'
+import { Button, Toaster } from './ui'
 
 const NAV = [
   { to: '/', label: 'Bảng tổng quan', icon: LayoutDashboard, end: true },
+  { to: '/alerts', label: 'Cảnh báo', icon: Bell },
   { to: '/schools', label: 'Theo trường', icon: School },
   { to: '/teachers', label: 'Theo giáo viên', icon: GraduationCap },
   { to: '/costs', label: 'Chi phí di chuyển', icon: Calculator },
@@ -22,6 +26,8 @@ export function Layout() {
   const anonymized = useStore((s) => s.anonymized)
   const week = useActiveWeek()
   const archived = week.status === 'archived'
+  const issues = useWeekIssues(useWeekContext())
+  const urgent = issues.filter((i) => ISSUE_META[i.kind].severity !== 'info').length
   return (
     <div className="flex h-full">
       <aside className="flex w-56 shrink-0 flex-col border-r border-slate-200 bg-white">
@@ -33,7 +39,8 @@ export function Layout() {
           {NAV.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => clsx('flex items-center gap-2.5 rounded-md px-2.5 py-1.5 font-medium', isActive ? 'bg-emerald-50 text-emerald-800' : 'text-slate-600 hover:bg-slate-100')}>
               <Icon size={15} />
-              {label}
+              <span className="flex-1">{label}</span>
+              {to === '/alerts' && urgent > 0 && <span data-testid="alert-count" className="tnum rounded-full bg-red-600 px-1.5 text-[11px] font-semibold text-white">{urgent}</span>}
             </NavLink>
           ))}
         </nav>
@@ -59,11 +66,13 @@ export function Layout() {
           ) : (
             <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><ArchiveRestore size={13} />Đang lập kế hoạch: có thể chỉnh sửa</span>
           )}
+          <Button className="ml-auto" onClick={() => openLeaveDialog({})}><CalendarOff size={14} />Giáo viên xin nghỉ</Button>
         </header>
         <main className="min-h-0 flex-1 overflow-auto p-5">
           <Outlet />
         </main>
       </div>
+      <LeaveDialog />
       <Toaster />
     </div>
   )

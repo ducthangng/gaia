@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
+import { AlertsPage } from './pages/Alerts'
 import { BoardPage } from './pages/Board'
 import { CostsPage } from './pages/Costs'
 import { DataPage } from './pages/Data'
@@ -17,6 +18,7 @@ export function App() {
         <Route path="print/:kind/:id?" element={<PrintPage />} />
         <Route element={<Layout />}>
           <Route index element={<BoardPage />} />
+          <Route path="alerts" element={<AlertsPage />} />
           <Route path="schools/:id?" element={<SchoolsPage />} />
           <Route path="teachers/:id?" element={<TeachersPage />} />
           <Route path="costs" element={<CostsPage />} />

@@ -11,6 +11,9 @@ export interface PrefViolation {
   label: string
 }
 
+// Khu vực có trong cột KHU VỰC của giáo viên; trường ở nơi khác (Hồ Tràm, Long Hải...) không so được.
+const KNOWN_AREAS = new Set(['PHÚ MỸ', 'CHÂU ĐỨC', 'BÀ RỊA', 'VŨNG TÀU', 'PHƯỚC HẢI'])
+
 const appliesOn = (days: number[] | undefined, date: string) => !days?.length || days.includes(dayIndex(date))
 
 /** Nguyện vọng cá nhân: vi phạm được cảnh báo chứ không chặn cứng. */
@@ -27,6 +30,10 @@ export function preferenceViolations(t: Teacher, l: Lesson, school: School | und
     } else if (p.type === 'noSession' && p.session === l.session) {
       out.push({ label: p.note || `Không nhận ca ${p.session === 'AM' ? 'sáng' : 'chiều'}` })
     }
+  }
+  const region = school?.region?.trim().toUpperCase()
+  if (t.areas.length && region && KNOWN_AREAS.has(region) && !t.areas.includes(region)) {
+    out.push({ label: `Ngoài khu vực đăng ký (${t.areas.join(', ')})` })
   }
   if (t.maxKm !== null && km !== undefined && km > t.maxKm) {
     out.push({ label: `Vượt phạm vi di chuyển ${t.maxKm} km` })
@@ -50,6 +57,7 @@ export function blockers(
   s: Settings,
 ): Blocker[] {
   const out: Blocker[] = []
+  if (t.onlineOnly) out.push({ kind: 'leave', note: 'Chỉ làm việc online' })
   const leave = leaves.find((x) => x.teacherId === t.id && x.date === l.date && x.session === l.session)
   if (leave) out.push({ kind: 'leave', note: leave.note })
   const start = toMin(l.start)

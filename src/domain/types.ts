@@ -1,8 +1,15 @@
 export type Session = 'AM' | 'PM'
-export type LessonStatus = 'assigned' | 'needs_cover' | 'replaced' | 'school_off'
+export type LessonStatus = 'assigned' | 'needs_cover' | 'replaced' | 'school_off' | 'cancelled'
 export type LessonType = 'regular' | 'substitute' | 'makeup' | 'support' | 'event' | 'observe'
 export type StartType = 'N' | 'V' | 'K'
 export type Gender = 'F' | 'M'
+
+export interface GeoPoint {
+  lat: number
+  lng: number
+  /** pluscode, street, manual: dùng được để đo. region: chỉ là tâm khu vực, chưa phải vị trí thật. */
+  source: 'pluscode' | 'street' | 'region' | 'manual'
+}
 
 export interface Lesson {
   id: string
@@ -70,6 +77,9 @@ export interface Teacher {
   subjects: string[]
   gender: Gender | null
   maxKm: number | null
+  /** Khu vực GV đăng ký dạy, viết hoa như cột KHU VỰC của data.xlsx. Rỗng = chưa khai báo. */
+  areas: string[]
+  onlineOnly: boolean
   preferences: Preference[]
 }
 
@@ -86,6 +96,7 @@ export interface School {
   /** derived = suy ra từ lịch sử dạy, confirmed = Gaia đã xác nhận. */
   referSource: 'derived' | 'confirmed'
   genderPreference?: Gender | null
+  geo?: GeoPoint
 }
 
 export interface Leave {
@@ -101,6 +112,7 @@ export interface Office {
   id: string
   name: string
   address: string | null
+  geo?: GeoPoint
 }
 
 export interface Distances {
@@ -164,7 +176,10 @@ export const DEFAULT_SETTINGS: Settings = {
   weights: { distance: 25, refer: 25, preference: 15, availability: 20, subject: 15 },
 }
 
+/** Cách hiển thị giáo viên thống nhất: mã kèm tên. Bản ẩn danh có tên chứa sẵn mã nên không lặp lại. */
+export const teacherLabel = (t: Pick<Teacher, 'id' | 'name'>) => (t.name.includes(t.id) ? t.name : `${t.id} · ${t.name}`)
+
 export const TEACHING_CODES = new Set(['K', 'S', 'C', 'K/2', 'S/2', 'C/2'])
 
 export const needsTeacher = (l: Lesson) =>
-  l.status !== 'school_off' && l.status !== 'replaced' && (l.code === null ? l.className !== null : TEACHING_CODES.has(l.code))
+  l.status !== 'school_off' && l.status !== 'replaced' && l.status !== 'cancelled' && (l.code === null ? l.className !== null : TEACHING_CODES.has(l.code))

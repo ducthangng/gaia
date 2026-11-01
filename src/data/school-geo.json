@@ -1,0 +1,225 @@
+{
+ "th-thcs-chu-van-an-vung-tau": {
+  "lat": 10.4086218,
+  "lng": 107.2290951,
+  "source": "osm",
+  "match": "Trường Tiểu học Lê Lợi, Đường Nguyễn Tất Thành, Ấp Hải An, Xã Long Hải, Thành phố Hồ Chí Minh, 78412"
+ },
+ "th-thcs-long-dien-ba-ria": {
+  "lat": 10.4914128,
+  "lng": 107.1719404,
+  "source": "region"
+ },
+ "th-thcs-luong-the-vinh-dong-nai": {
+  "lat": 10.4086218,
+  "lng": 107.2290951,
+  "source": "osm",
+  "match": "Trường Tiểu học Lê Lợi, Đường Nguyễn Tất Thành, Ấp Hải An, Xã Long Hải, Thành phố Hồ Chí Minh, 78412"
+ },
+ "th-thcs-tran-van-thuong-ba-ria": {
+  "lat": 10.4914128,
+  "lng": 107.1719404,
+  "source": "region"
+ },
+ "th-bau-sen-vung-tau": {
+  "lat": 10.3505359,
+  "lng": 107.0715014,
+  "source": "region"
+ },
+ "th-binh-ba-ba-ria": {
+  "lat": 10.4914128,
+  "lng": 107.1719404,
+  "source": "region"
+ },
+ "th-huynh-minh-thanh-ho-tram": {
+  "lat": 10.5340658,
+  "lng": 107.3988146,
+  "source": "osm",
+  "match": "Trường Tiểu học Phước Bửu, Huỳnh Minh Thạnh, Ấp Phước Bửu, Xã Hồ Tràm, Thành phố Hồ Chí Minh, 78500,"
+ },
+ "th-ho-tram-xuyen-moc": {
+  "lat": 10.573203,
+  "lng": 107.3884144,
+  "source": "osm",
+  "match": "Trường Tiểu học Trần Quốc Toản, Đường tỉnh 992, Nhân Tiến, Xã Hồ Tràm, Thành phố Hồ Chí Minh, 78500,"
+ },
+ "th-kim-long-chau-duc": {
+  "lat": 10.6621029,
+  "lng": 107.2428985,
+  "source": "region"
+ },
+ "th-kim-dong-vung-tau": {
+  "lat": 10.3505359,
+  "lng": 107.0715014,
+  "source": "region"
+ },
+ "th-ly-thuong-kiet-phu-my": {
+  "lat": 10.5819701,
+  "lng": 107.0628943,
+  "source": "region"
+ },
+ "th-ly-thuong-kiet-cs2-phu-my": {
+  "lat": 10.5819701,
+  "lng": 107.0628943,
+  "source": "region"
+ },
+ "th-ly-tu-trong-vung-tau": {
+  "lat": 10.3505359,
+  "lng": 107.0715014,
+  "source": "region"
+ },
+ "th-luu-chi-hieu-vung-tau": {
+  "lat": 10.3505359,
+  "lng": 107.0715014,
+  "source": "region"
+ },
+ "th-my-xuan-phu-my": {
+  "lat": 10.6415346,
+  "lng": 107.0477741,
+  "source": "osm",
+  "match": "Trường Mẫu giáo Mỹ Xuân, Xuân Diệu, Phước Lập, Phường Phú Mỹ, Thành phố Hồ Chí Minh, 78706, Việt Nam"
+ },
+ "th-nghia-thanh-chau-duc": {
+  "lat": 10.6621029,
+  "lng": 107.2428985,
+  "source": "region"
+ },
+ "th-nguyen-hue-phu-my": {
+  "lat": 10.5819701,
+  "lng": 107.0628943,
+  "source": "region"
+ },
+ "th-nguyen-minh-khanh-ba-ria": {
+  "lat": 10.4914128,
+  "lng": 107.1719404,
+  "source": "region"
+ },
+ "th-nguyen-thi-minh-khai-chau-duc": {
+  "lat": 10.6621029,
+  "lng": 107.2428985,
+  "source": "region"
+ },
+ "th-nguyen-thi-minh-khai-phu-my": {
+  "lat": 10.5819701,
+  "lng": 107.0628943,
+  "source": "region"
+ },
+ "th-nguyen-thi-dinh-phu-my": {
+  "lat": 10.5819701,
+  "lng": 107.0628943,
+  "source": "region"
+ },
+ "th-phan-chu-trinh-chau-duc": {
+  "lat": 10.7403168,
+  "lng": 107.2016351,
+  "source": "osm",
+  "match": "Trường Tiểu học Phan Chu Trinh, Xà Bang - Cù Bị, Xã Châu Đức, Thành phố Hồ Chí Minh, Xã Cẩm Mỹ, Thàn"
+ },
+ "th-phuoc-an-vung-tau": {
+  "lat": 10.3431646,
+  "lng": 107.0782452,
+  "source": "osm",
+  "match": "Phước An, Trương Công Định, Khu phố 12, Phường Vũng Tàu, Thành phố Hồ Chí Minh, 78207, Việt Nam"
+ },
+ "th-phuoc-buu-ho-tram": {
+  "lat": 10.5242283,
+  "lng": 107.4056223,
+  "source": "osm",
+  "match": "Trường Tiểu học Huỳnh Minh Thạnh, Phước Duyên, Ấp Phước Bửu, Xã Hồ Tràm, Thành phố Hồ Chí Minh, 7850"
+ },
+ "th-phuoc-hung-long-dien": {
+  "lat": 10.3897149,
+  "lng": 107.2322672,
+  "source": "region"
+ },
+ "th-phuoc-hai-phuoc-hai": {
+  "lat": 10.4205499,
+  "lng": 107.284223,
+  "source": "osm",
+  "match": "Trường Mầm non Phước Hải, Trần Bình Trọng, Hải Sơn, Xã Phước Hải, Thành phố Hồ Chí Minh, Việt Nam"
+ },
+ "th-phuoc-hai-1-phuoc-hai": {
+  "lat": 10.4618162,
+  "lng": 107.3353753,
+  "source": "region"
+ },
+ "th-phuoc-hai-2-phuoc-hai": {
+  "lat": 10.4618162,
+  "lng": 107.3353753,
+  "source": "region"
+ },
+ "th-quang-trung-phu-my": {
+  "lat": 10.5819701,
+  "lng": 107.0628943,
+  "source": "region"
+ },
+ "th-thang-nhat-vung-tau": {
+  "lat": 10.3505359,
+  "lng": 107.0715014,
+  "source": "region"
+ },
+ "th-truong-cong-dinh-vung-tau": {
+  "lat": 10.3458985,
+  "lng": 107.0806263,
+  "source": "osm",
+  "match": "Trường Mầm non 20-10, Trương Công Định, Khu phố 14, Phường Vũng Tàu, Thành phố Hồ Chí Minh, 78223, V"
+ },
+ "th-tran-quoc-tuan-chau-duc": {
+  "lat": 10.6621029,
+  "lng": 107.2428985,
+  "source": "region"
+ },
+ "thcs-chau-van-biec-phuoc-hai": {
+  "lat": 10.4618162,
+  "lng": 107.3353753,
+  "source": "region"
+ },
+ "thcs-chau-duc-chau-duc": {
+  "lat": 10.7296122,
+  "lng": 107.2371365,
+  "source": "osm",
+  "match": "Trường Trung học cơ sở Trần Đại Nghĩa, Xà Bang - Láng Lớn, Liên Hiệp 1, Liên Đức, Xã Châu Đức, Thành"
+ },
+ "thcs-hung-duong-phu-my": {
+  "lat": 10.5819701,
+  "lng": 107.0628943,
+  "source": "region"
+ },
+ "thcs-le-hong-phong-phu-my": {
+  "lat": 10.5819701,
+  "lng": 107.0628943,
+  "source": "region"
+ },
+ "thcs-nguyen-thanh-dang-ba-ria": {
+  "lat": 10.4914128,
+  "lng": 107.1719404,
+  "source": "region"
+ },
+ "thcs-nguyen-trai-long-hai": {
+  "lat": 10.4253467,
+  "lng": 107.2252915,
+  "source": "osm",
+  "match": "Trường Trung học cơ sở Nguyễn Trãi, Bạch Đằng, Ấp Phước Hưng, Xã Long Hải, Thành phố Hồ Chí Minh, Vi"
+ },
+ "thcs-phan-boi-chau-phu-my": {
+  "lat": 10.5819701,
+  "lng": 107.0628943,
+  "source": "region"
+ },
+ "thcs-phuoc-hoa-phu-my": {
+  "lat": 10.5819701,
+  "lng": 107.0628943,
+  "source": "region"
+ },
+ "thcs-phuoc-hai-phuoc-hai": {
+  "lat": 10.4618162,
+  "lng": 107.3353753,
+  "source": "region"
+ },
+ "thcs-xa-bang-chau-duc": {
+  "lat": 10.7296122,
+  "lng": 107.2371365,
+  "source": "osm",
+  "match": "Trường Trung học cơ sở Trần Đại Nghĩa, Xà Bang - Láng Lớn, Liên Hiệp 1, Liên Đức, Xã Châu Đức, Thành"
+ }
+}

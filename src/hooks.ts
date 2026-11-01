@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { buildContext } from './domain/context'
+import { weekIssues, type Issue } from './domain/issues'
 import { routeForWeek, type DayRoute } from './domain/route'
 import { weekDates } from './domain/time'
 import { useActiveWeek, useStore } from './store'
@@ -44,3 +45,5 @@ export function weekCosts(ctx: Ctx): WeekCost[] {
       }
     })
 }
+
+export const useWeekIssues = (ctx: Ctx): Issue[] => useMemo(() => weekIssues(ctx), [ctx])

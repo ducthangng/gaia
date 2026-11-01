@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Button, Card, PageHeader, Stat } from '../components/ui'
 import { dayLabel, money, weekDates } from '../domain/time'
+import { teacherLabel } from '../domain/types'
 import { useWeekContext, weekCosts } from '../hooks'
 import { exportWeek } from '../services/exports'
 
@@ -12,6 +13,7 @@ export function CostsPage() {
   const dates = weekDates(ctx.week.startDate)
   const rows = useMemo(() => weekCosts(ctx).filter((c) => c.km > 0 || c.cost > 0), [ctx])
   const name = (id: string) => ctx.teacherById.get(id)?.name ?? id
+  const label = (id: string) => { const t = ctx.teacherById.get(id); return t ? teacherLabel(t) : id }
   const sorted = [...rows].sort((a, b) => (sort === 'cost' ? b.cost - a.cost : name(a.teacherId).localeCompare(name(b.teacherId), 'vi')))
   const total = rows.reduce((s, r) => s + r.cost, 0)
   const km = rows.reduce((s, r) => s + r.km, 0)
@@ -77,7 +79,7 @@ export function CostsPage() {
                 const rep = reported?.[r.teacherId]?.cost ?? 0
                 return (
                   <tr key={r.teacherId} className="hover:bg-slate-50">
-                    <td className="sticky left-0 bg-white px-4 py-1.5"><Link to={`/teachers/${r.teacherId}`} className="font-medium hover:text-emerald-700 hover:underline">{name(r.teacherId)}</Link>{r.hasEstimate && <Badge tone="amber" className="ml-1.5">ước tính</Badge>}</td>
+                    <td className="sticky left-0 bg-white px-4 py-1.5"><Link to={`/teachers/${r.teacherId}`} className="font-medium hover:text-emerald-700 hover:underline">{label(r.teacherId)}</Link>{r.hasEstimate && <Badge tone="amber" className="ml-1.5">ước tính</Badge>}</td>
                     {r.days.map((d) => (
                       <td key={d.date} className="px-2 py-1.5 text-right" title={d.legs.length ? `${d.legs.map((l) => `${l.start} ${l.km}km`).join(' → ')} → về nhà ${d.returnKm}km` : undefined}>
                         {d.legs.length ? (d.cost ? d.cost.toLocaleString('vi-VN') : <span className="text-slate-400">0</span>) : ''}

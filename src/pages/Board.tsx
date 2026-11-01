@@ -1,64 +1,104 @@
+import { autoUpdate, flip, FloatingPortal, offset, shift, useDismiss, useFloating, useFocus, useHover, useInteractions, useRole } from '@floating-ui/react'
 import clsx from 'clsx'
 import { AlertOctagon, AlertTriangle, Check, FileDown, Info, Sparkles } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { LessonChip } from '../components/LessonChip'
-import { Badge, Button, Card, Empty, PageHeader, Stat, toast } from '../components/ui'
-import { coverage, ISSUE_META, weekIssues, type IssueKind } from '../domain/issues'
-import { byTime } from '../domain/route'
-import { dayLabel, money, shortDate, DAY_LABELS, weekDates } from '../domain/time'
+import { Badge, Button, Card, PageHeader, Stat, toast } from '../components/ui'
+import { coverage, healthOf, ISSUE_META, schoolLoad, touchesSchool, type Health, type Issue, type IssueKind } from '../domain/issues'
+import { DAY_LABELS, money, shortDate, weekDates } from '../domain/time'
 import { needsTeacher } from '../domain/types'
-import { useWeekContext, weekCosts } from '../hooks'
+import { useWeekContext, useWeekIssues, weekCosts } from '../hooks'
 import { exportWeek } from '../services/exports'
 import { useStore } from '../store'
 
-const SEVERITY_ICON = { critical: AlertOctagon, warning: AlertTriangle, info: Info }
-const KINDS: IssueKind[] = ['uncovered', 'conflict', 'preference', 'refer']
+const HEALTH_STYLE: Record<Health, string> = {
+  critical: 'bg-red-100 text-red-800 ring-1 ring-red-300',
+  warning: 'bg-amber-100 text-amber-900 ring-1 ring-amber-300',
+  ok: 'bg-emerald-50 text-emerald-800',
+}
+const HEALTH_ICON = { critical: AlertOctagon, warning: AlertTriangle, ok: Check }
+
+const MAX_LINES = 6
+
+function HealthCell({ schoolId, schoolName, date, count, issues }: { schoolId: string; schoolName: string; date: string; count: number; issues: Issue[] }) {
+  const [open, setOpen] = useState(false)
+  const { refs, floatingStyles, context } = useFloating({ open, onOpenChange: setOpen, placement: 'top', whileElementsMounted: autoUpdate, middleware: [offset(6), flip({ padding: 8 }), shift({ padding: 8 })] })
+  const { getReferenceProps, getFloatingProps } = useInteractions([useHover(context, { delay: { open: 60 }, move: false }), useFocus(context), useDismiss(context), useRole(context, { role: 'tooltip' })])
+  const health = healthOf(issues)
+  const Icon = HEALTH_ICON[health]
+  const main = issues.filter((i) => ISSUE_META[i.kind].severity !== 'info')
+  const notes = issues.filter((i) => ISSUE_META[i.kind].severity === 'info')
+  const refer = notes.filter((i) => i.kind === 'refer').length
+  const pref = notes.length - refer
+  const label = `${count} ca, ${health === 'critical' ? 'có lỗi nghiêm trọng' : health === 'warning' ? 'có chặng không kịp' : 'ổn'}${issues.length ? `, ${issues.length} cảnh báo` : ''}`
+  return (
+    <>
+      <Link ref={refs.setReference} {...getReferenceProps()} to={`/schools/${schoolId}`} aria-label={label} data-health={health} className={clsx('tnum relative inline-flex min-w-11 items-center justify-center gap-1 rounded px-1.5 py-1 text-xs font-semibold transition hover:brightness-95', HEALTH_STYLE[health])}>
+        <Icon size={11} />{count}
+        {health === 'ok' && notes.length > 0 && <span aria-hidden className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-sky-500" />}
+      </Link>
+      {open && issues.length > 0 && (
+        <FloatingPortal>
+          <div ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()} data-testid="health-tooltip" className="pointer-events-none z-50 w-96 max-w-[90vw] rounded-lg bg-slate-900 px-3 py-2.5 text-xs leading-relaxed text-white shadow-xl">
+            <div className="mb-1 font-semibold">{schoolName} · {shortDate(date)}</div>
+            <ul className="space-y-1.5">
+              {main.slice(0, MAX_LINES).map((i, n) => (
+                <li key={n}>
+                  <span className={clsx('font-semibold', ISSUE_META[i.kind].severity === 'critical' ? 'text-red-300' : 'text-amber-300')}>{ISSUE_META[i.kind].label}</span>
+                  {i.lesson.start && <span className="tnum text-slate-300"> {i.lesson.start}</span>}
+                  {i.lesson.className && <span className="text-slate-300"> lớp {i.lesson.className}</span>}
+                  <div className="text-slate-200">{i.detail}</div>
+                </li>
+              ))}
+            </ul>
+            {main.length > MAX_LINES && <div className="mt-1 text-slate-300">và {main.length - MAX_LINES} cảnh báo khác</div>}
+            {notes.length > 0 && <div className={clsx('flex items-center gap-1 text-sky-200', main.length > 0 && 'mt-1.5')}><Info size={11} />{[refer && `${refer} ca ngoài Refer`, pref && `${pref} ca vi phạm nguyện vọng`].filter(Boolean).join(', ')}</div>}
+          </div>
+        </FloatingPortal>
+      )}
+    </>
+  )
+}
+
+function KpiLink({ kind, ...props }: { kind: IssueKind } & Parameters<typeof Stat>[0]) {
+  return <Link to={`/alerts?kind=${kind}`} className="block transition hover:brightness-95"><Stat {...props} /></Link>
+}
 
 export function BoardPage() {
   const ctx = useWeekContext()
   const autoFill = useStore((s) => s.autoFill)
-  const [kind, setKind] = useState<IssueKind | 'all'>('all')
-  const [limit, setLimit] = useState(40)
-  const issues = useMemo(() => weekIssues(ctx), [ctx])
+  const issues = useWeekIssues(ctx)
   const cov = useMemo(() => coverage(ctx.week.lessons), [ctx.week.lessons])
   const costs = useMemo(() => weekCosts(ctx), [ctx])
   const count = (k: IssueKind) => issues.filter((i) => i.kind === k).length
   const totalCost = costs.reduce((s, c) => s + c.cost, 0)
   const totalKm = costs.reduce((s, c) => s + c.km, 0)
-  const shown = issues
-    .filter((i) => kind === 'all' || i.kind === kind)
-    .sort((a, b) => KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind) || a.lesson.date.localeCompare(b.lesson.date) || byTime(a.lesson, b.lesson))
-  const dates = weekDates(ctx.week.startDate)
+  const dates = useMemo(() => weekDates(ctx.week.startDate), [ctx.week.startDate])
   const planning = ctx.week.status === 'planning'
 
-  const matrix = useMemo(() => {
-    const rows = new Map<string, { required: number[]; uncovered: number[]; flagged: number[] }>()
-    const empty = () => ({ required: Array(7).fill(0), uncovered: Array(7).fill(0), flagged: Array(7).fill(0) })
-    for (const l of ctx.week.lessons) {
-      if (!needsTeacher(l)) continue
-      const row = rows.get(l.schoolId) ?? empty()
-      rows.set(l.schoolId, row)
-      const d = dates.indexOf(l.date)
-      row.required[d]++
-      if (l.status === 'needs_cover' || !l.teacherId) row.uncovered[d]++
-    }
-    for (const i of issues) {
-      if (i.kind === 'uncovered') continue
-      const row = rows.get(i.lesson.schoolId)
-      if (row) row.flagged[dates.indexOf(i.lesson.date)]++
-    }
-    return [...rows.entries()]
-      .map(([id, r]) => ({ id, name: ctx.schoolById.get(id)?.fullName ?? id, ...r, un: r.uncovered.reduce((a, b) => a + b, 0) }))
-      .sort((a, b) => b.un - a.un || a.name.localeCompare(b.name, 'vi'))
+  const rows = useMemo(() => {
+    const load = schoolLoad(ctx.week.lessons)
+    return [...load.entries()]
+      .sort(([a, x], [b, y]) => y - x || (ctx.schoolById.get(a)?.fullName ?? a).localeCompare(ctx.schoolById.get(b)?.fullName ?? b, 'vi'))
+      .map(([id, total]) => {
+        const mine = issues.filter((i) => touchesSchool(i, id))
+        const days = dates.map((d) => ({
+          date: d,
+          count: ctx.week.lessons.filter((l) => l.schoolId === id && l.date === d && needsTeacher(l)).length,
+          issues: mine.filter((i) => i.lesson.date === d),
+        }))
+        return { id, name: ctx.schoolById.get(id)?.fullName ?? id, total, days, health: healthOf(mine) }
+      })
   }, [ctx, issues, dates])
-  const usedDays = dates.map((_, i) => matrix.some((r) => r.required[i] > 0))
+  const usedDays = dates.map((_, i) => rows.some((r) => r.days[i].count > 0))
+  const summary = { critical: 0, warning: 0, ok: 0 }
+  for (const r of rows) summary[r.health]++
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="mx-auto max-w-[1300px]">
       <PageHeader
         title="Bảng tổng quan"
-        subtitle={`Trạng thái phân công tuần ${shortDate(ctx.week.startDate)} – ${shortDate(ctx.week.endDate)}.`}
+        subtitle={`Sức khoẻ toàn hệ thống tuần ${shortDate(ctx.week.startDate)} – ${shortDate(ctx.week.endDate)}.`}
         actions={<>
           {planning && (
             <Button variant="primary" disabled={!count('uncovered')} onClick={() => {
@@ -71,82 +111,56 @@ export function BoardPage() {
         </>}
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Stat label="Độ phủ lớp học" value={`${(cov.ratio * 100).toFixed(1)}%`} hint={`${cov.covered}/${cov.required} ca có giáo viên`} tone={cov.ratio < 1 ? 'critical' : undefined} />
-        <Stat label="Chưa có giáo viên" value={count('uncovered')} tone={count('uncovered') ? 'critical' : undefined} hint="Ca cần xếp ngay" />
-        <Stat label="Trùng lịch / không kịp" value={count('conflict')} tone={count('conflict') ? 'critical' : undefined} hint="Tính cả thời gian di chuyển" />
-        <Stat label="Ngoài danh sách Refer" value={count('refer')} tone={count('refer') ? 'warning' : undefined} hint="Cần quản trị viên xem xét" />
-        <Stat label="Vi phạm nguyện vọng" value={count('preference')} tone={count('preference') ? 'warning' : undefined} hint="Theo nguyện vọng đã khai" />
-        <Stat label="Chi phí di chuyển" value={money(totalCost)} hint={`${Math.round(totalKm).toLocaleString('vi-VN')} km gồm chặng về nhà`} />
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+        <Stat label="Độ phủ lớp học" value={`${(cov.ratio * 100).toFixed(1)}%`} hint={`${cov.covered}/${cov.required} ca`} tone={cov.ratio < 1 ? 'critical' : undefined} />
+        <KpiLink kind="uncovered" label="Chưa có giáo viên" value={count('uncovered')} tone={count('uncovered') ? 'critical' : undefined} />
+        <KpiLink kind="overlap" label="Trùng lịch" value={count('overlap')} tone={count('overlap') ? 'critical' : undefined} />
+        <KpiLink kind="travel" label="Không kịp di chuyển" value={count('travel')} tone={count('travel') ? 'warning' : undefined} />
+        <KpiLink kind="refer" label="Ngoài Refer" value={count('refer')} />
+        <KpiLink kind="preference" label="Vi phạm nguyện vọng" value={count('preference')} />
+        <Stat label="Chi phí di chuyển" value={money(totalCost)} hint={`${Math.round(totalKm).toLocaleString('vi-VN')} km`} />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-        <Card title="Cảnh báo cần xử lý" actions={
-          <select aria-label="Lọc cảnh báo" value={kind} onChange={(e) => { setKind(e.target.value as IssueKind | 'all'); setLimit(40) }}>
-            <option value="all">Tất cả ({issues.length})</option>
-            {KINDS.map((k) => <option key={k} value={k}>{ISSUE_META[k].label} ({count(k)})</option>)}
-          </select>
-        }>
-          {shown.length === 0 ? (
-            <Empty><Check size={16} className="mx-auto mb-1 text-emerald-600" />Không có cảnh báo nào.</Empty>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {shown.slice(0, limit).map((i, n) => {
-                const meta = ISSUE_META[i.kind]
-                const Icon = SEVERITY_ICON[meta.severity]
-                return (
-                  <li key={`${i.kind}-${i.lesson.id}-${n}`} className="grid grid-cols-[minmax(0,1fr)_170px] gap-3 px-4 py-2.5">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 font-medium">
-                        <Icon size={14} className={clsx(meta.severity === 'critical' ? 'text-red-600' : meta.severity === 'warning' ? 'text-amber-600' : 'text-sky-600')} />
-                        {meta.label}
-                      </div>
-                      <div className="mt-0.5 truncate text-slate-700">{ctx.schoolById.get(i.lesson.schoolId)?.fullName}</div>
-                      <div className="text-xs text-slate-500">{dayLabel(i.lesson.date)} · {i.detail}</div>
-                    </div>
-                    <LessonChip lesson={i.lesson} ctx={ctx} show="teacher" />
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-          {shown.length > limit && <div className="border-t border-slate-100 p-2 text-center"><Button variant="ghost" onClick={() => setLimit((x) => x + 60)}>Xem thêm ({shown.length - limit})</Button></div>}
-        </Card>
-
-        <Card title="Trạng thái theo trường" actions={<span className="text-xs text-slate-500">Số ca mỗi ngày</span>}>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-left text-xs text-slate-500">
-                  <th className="px-4 py-2 font-medium">Trường</th>
-                  {DAY_LABELS.map((d, i) => usedDays[i] && <th key={d} className="px-1 py-2 text-center font-medium">{d}</th>)}
+      <Card
+        title="Trạng thái theo trường"
+        actions={<span className="flex items-center gap-1.5 text-xs" data-testid="health-summary">
+          <Badge tone="red"><AlertOctagon size={10} />{summary.critical} trường có lỗi</Badge>
+          <Badge tone="amber"><AlertTriangle size={10} />{summary.warning} không kịp</Badge>
+          <Badge tone="green"><Check size={10} />{summary.ok} ổn</Badge>
+        </span>}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full" data-testid="health-table">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
+                <th className="px-4 py-2 font-medium">Trường</th>
+                <th className="px-2 py-2 text-right font-medium">Tổng ca</th>
+                {dates.map((d, i) => usedDays[i] && <th key={d} className="px-1 py-2 text-center font-medium">{DAY_LABELS[i]} <span className="font-normal text-slate-400">{shortDate(d)}</span></th>)}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((r) => (
+                <tr key={r.id} className="hover:bg-slate-50">
+                  <td className="max-w-[320px] truncate px-4 py-1.5"><Link className="font-medium hover:text-emerald-700 hover:underline" to={`/schools/${r.id}`}>{r.name}</Link></td>
+                  <td className="tnum px-2 py-1.5 text-right text-slate-600">{r.total}</td>
+                  {r.days.map((c, i) => usedDays[i] && (
+                    <td key={c.date} className="px-1 py-1 text-center">
+                      {c.count > 0 && <HealthCell schoolId={r.id} schoolName={r.name} date={c.date} count={c.count} issues={c.issues} />}
+                    </td>
+                  ))}
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {matrix.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50">
-                    <td className="max-w-[260px] truncate px-4 py-1.5"><Link className="hover:text-emerald-700 hover:underline" to={`/schools/${r.id}`}>{r.name}</Link></td>
-                    {r.required.map((n, i) => usedDays[i] && (
-                      <td key={i} className="px-1 py-1 text-center">
-                        {n > 0 && (
-                          <span title={`${n} ca · ${r.uncovered[i]} chưa có GV · ${r.flagged[i]} cảnh báo`} className={clsx('tnum inline-flex min-w-9 items-center justify-center gap-0.5 rounded px-1 py-0.5 text-xs font-medium', r.uncovered[i] ? 'bg-red-100 text-red-800' : r.flagged[i] ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-800')}>
-                            {r.uncovered[i] ? <AlertOctagon size={10} /> : r.flagged[i] ? <AlertTriangle size={10} /> : <Check size={10} />}{n}
-                          </span>
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex flex-wrap gap-2 border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
-            <Badge tone="green"><Check size={10} />Đủ giáo viên</Badge>
-            <Badge tone="amber"><AlertTriangle size={10} />Có cảnh báo</Badge>
-            <Badge tone="red"><AlertOctagon size={10} />Có ca trống</Badge>
-          </div>
-        </Card>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 px-4 py-2 text-xs text-slate-600">
+          <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-5 items-center justify-center rounded bg-red-100 text-red-800"><AlertOctagon size={10} /></span>Trùng lịch, ca trống, GV đang nghỉ</span>
+          <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-5 items-center justify-center rounded bg-amber-100 text-amber-900"><AlertTriangle size={10} /></span>Không kịp di chuyển</span>
+          <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-5 items-center justify-center rounded bg-emerald-50 text-emerald-800"><Check size={10} /></span>Ổn</span>
+          <span className="inline-flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-sky-500" />Ổn, có ghi chú Refer hoặc nguyện vọng</span>
+          <span className="ml-auto text-slate-500">Rê chuột vào ô để xem tóm tắt, bấm để mở trường</span>
+        </div>
+      </Card>
     </div>
   )
 }

@@ -1,4 +1,5 @@
-import type { Distances, School, Teacher } from './types'
+import { isPrecise, roadKm } from './geo'
+import type { Distances, GeoPoint, Office, School, Teacher } from './types'
 
 export type KmSource = 'recorded' | 'estimated' | 'manual'
 export interface Km {
@@ -16,7 +17,7 @@ const norm = (s: string | null | undefined) => (s ?? '').trim().toUpperCase()
 
 /**
  * Sổ khoảng cách suy từ SỐ KM mà Gaia đã ghi (workbook không có toạ độ hay địa chỉ trường).
- * Cặp nào chưa từng đi thì ước lượng bằng trung vị theo khu vực và gắn nhãn "estimated".
+ * Thứ tự ưu tiên: số đã ghi, rồi toạ độ thật, rồi trung vị theo khu vực (hai nguồn sau gắn nhãn "estimated").
  */
 export class DistanceBook {
   private districtRegion = new Map<string, number[]>()
@@ -25,9 +26,11 @@ export class DistanceBook {
   private schools: Map<string, School>
   private teachers: Map<string, Teacher>
   private distances: Distances
+  private officeGeo: Map<string, GeoPoint | undefined>
 
-  constructor(distances: Distances, teachers: Teacher[], schools: School[]) {
+  constructor(distances: Distances, teachers: Teacher[], schools: School[], offices: Office[] = []) {
     this.distances = distances
+    this.officeGeo = new Map(offices.map((o) => [o.id, o.geo]))
     this.schools = new Map(schools.map((s) => [s.id, s]))
     this.teachers = new Map(teachers.map((t) => [t.id, t]))
     const push = (m: Map<string, number[]>, k: string, v: number) => m.set(k, [...(m.get(k) ?? []), v])
@@ -61,6 +64,9 @@ export class DistanceBook {
   fromOffice(officeId: string, schoolId: string): Km {
     const exact = this.distances.office[`${officeId}|${schoolId}`]
     if (exact !== undefined) return { km: exact, source: 'recorded' }
+    const a = this.officeGeo.get(officeId)
+    const b = this.schools.get(schoolId)?.geo
+    if (isPrecise(a) && isPrecise(b)) return { km: roadKm(a, b), source: 'estimated' }
     const samples = this.officeRegion.get(`${officeId}|${this.region(schoolId)}`)
     return { km: samples ? median(samples) : 20, source: 'estimated' }
   }
@@ -69,6 +75,9 @@ export class DistanceBook {
     if (a === b) return { km: 0, source: 'recorded' }
     const exact = this.distances.pair[[a, b].sort().join('|')]
     if (exact !== undefined) return { km: exact, source: 'recorded' }
+    const ga = this.schools.get(a)?.geo
+    const gb = this.schools.get(b)?.geo
+    if (isPrecise(ga) && isPrecise(gb)) return { km: roadKm(ga, gb), source: 'estimated' }
     const samples = this.regionPair.get([this.region(a), this.region(b)].sort().join('|'))
     return { km: samples ? median(samples) : 15, source: 'estimated' }
   }

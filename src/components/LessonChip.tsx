@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react'
 import { blockerLabel } from '../domain/constraints'
 import { rankCandidates, type Candidate } from '../domain/recommend'
 import { dayLabel, money, SESSION_LABEL } from '../domain/time'
-import type { Lesson } from '../domain/types'
+import { teacherLabel, type Lesson } from '../domain/types'
 import type { Ctx } from '../hooks'
 import { useStore } from '../store'
 import { Badge, Button, toast } from './ui'
@@ -34,7 +34,8 @@ export function LessonChip({ lesson: l, ctx, show }: { lesson: Lesson; ctx: Ctx;
   const school = ctx.schoolById.get(l.schoolId)
   const off = l.status === 'school_off'
   const replaced = l.status === 'replaced'
-  const uncovered = l.status === 'needs_cover' || (!l.teacherId && !off && !replaced)
+  const cancelled = l.status === 'cancelled'
+  const uncovered = l.status === 'needs_cover' || (!l.teacherId && !off && !replaced && !cancelled)
   const typeLabel = TYPE_LABEL[l.type]
 
   return (
@@ -44,7 +45,7 @@ export function LessonChip({ lesson: l, ctx, show }: { lesson: Lesson; ctx: Ctx;
         {...getReferenceProps()}
         className={clsx(
           'block w-full rounded border px-1.5 py-1 text-left leading-tight transition hover:ring-2 hover:ring-emerald-500/40',
-          uncovered ? 'border-red-300 bg-red-50' : off || replaced ? 'border-slate-200 bg-slate-100 text-slate-500' : subjectStyle(l.subject),
+          uncovered ? 'border-red-300 bg-red-50' : off || replaced || cancelled ? 'border-slate-200 bg-slate-100 text-slate-500' : subjectStyle(l.subject),
           open && 'ring-2 ring-emerald-600',
         )}
       >
@@ -52,13 +53,13 @@ export function LessonChip({ lesson: l, ctx, show }: { lesson: Lesson; ctx: Ctx;
           <span className="tnum text-[11px] text-slate-500">{l.start ?? `Tiết ${l.period}`}</span>
           <span className="truncate text-[11px] text-slate-500">{l.subject}</span>
         </div>
-        <div className={clsx('truncate font-medium', (off || replaced) && 'line-through')}>{l.className ?? l.note ?? '—'}</div>
+        <div className={clsx('truncate font-medium', (off || replaced || cancelled) && 'line-through')}>{l.className ?? l.note ?? '—'}</div>
         <div className={clsx('truncate text-xs', uncovered ? 'font-medium text-red-700' : 'text-slate-600')}>
           {uncovered ? (
             <span className="inline-flex items-center gap-1"><AlertTriangle size={11} />Cần giáo viên</span>
-          ) : off ? 'Trường báo nghỉ' : replaced ? 'GV nghỉ, đã có người thay' : show === 'teacher' ? (teacher?.name ?? l.teacherId) : school?.fullName}
+          ) : off ? 'Trường báo nghỉ' : replaced ? 'GV nghỉ, đã có người thay' : cancelled ? 'Huỷ do GV nghỉ' : show === 'teacher' ? (teacher ? teacherLabel(teacher) : l.teacherId) : school?.fullName}
         </div>
-        {typeLabel && !off && !replaced && !uncovered && <div className="truncate text-[11px] text-slate-500">{typeLabel}</div>}
+        {typeLabel && !off && !replaced && !cancelled && !uncovered && <div className="truncate text-[11px] text-slate-500">{typeLabel}</div>}
       </button>
       {open && (
         <FloatingPortal>
@@ -94,8 +95,8 @@ function AssignPanel({ lesson: l, ctx, close }: { lesson: Lesson; ctx: Ctx; clos
           {dayLabel(l.date)} · {SESSION_LABEL[l.session]} · {l.start && l.end ? `${l.start}–${l.end}` : `Tiết ${l.period}`}
         </div>
         <div className="mt-1 text-xs">
-          {current ? <>Đang dạy: <b>{current.name}</b></> : <span className="font-medium text-red-700">Chưa có giáo viên</span>}
-          {original && original.id !== current?.id && <span className="text-slate-500"> · GV gốc: {original.name}</span>}
+          {current ? <>Đang dạy: <b>{teacherLabel(current)}</b></> : <span className="font-medium text-red-700">Chưa có giáo viên</span>}
+          {original && original.id !== current?.id && <span className="text-slate-500"> · GV gốc: {teacherLabel(original)}</span>}
         </div>
         {l.note && <div className="mt-0.5 text-xs text-slate-500">Ghi chú: {l.note}</div>}
         {!readOnly && (
@@ -126,7 +127,7 @@ function AssignPanel({ lesson: l, ctx, close }: { lesson: Lesson; ctx: Ctx; clos
             {shown.map((c, i) => (
               <CandidateRow key={c.teacher.id} c={c} rank={i + 1} current={c.teacher.id === l.teacherId} onPick={() => {
                 assign(l.id, c.teacher.id)
-                toast(`Đã phân công ${c.teacher.name}`)
+                toast(`Đã phân công ${teacherLabel(c.teacher)}`)
                 close()
               }} />
             ))}
@@ -146,7 +147,7 @@ function CandidateRow({ c, rank, current, onPick }: { c: Candidate; rank: number
         <span className={clsx('tnum mt-0.5 w-9 shrink-0 rounded py-0.5 text-center text-xs font-semibold', scoreTone)} title="Điểm phù hợp /100">{c.score}</span>
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline justify-between gap-2">
-            <span className="truncate font-medium"><span className="tnum mr-1 text-xs text-slate-400">{rank}.</span>{c.teacher.name}</span>
+            <span className="truncate font-medium"><span className="tnum mr-1 text-xs text-slate-400">{rank}.</span>{teacherLabel(c.teacher)}</span>
             <span className={clsx('tnum whitespace-nowrap text-xs', c.extraCost > 0 ? 'text-slate-700' : 'text-slate-500')} title="Chi phí di chuyển tăng thêm trong ngày">
               {c.extraCost > 0 ? `+${money(c.extraCost)}` : c.extraCost < 0 ? money(c.extraCost) : 'Không tăng chi phí'}
             </span>

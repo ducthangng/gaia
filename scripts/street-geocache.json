@@ -1,0 +1,74 @@
+{
+ "Số 236 Bình Giã, Phường 8 (hoặc khu vực Tam Thắng), Thành phố Vũng Tàu, tỉnh Bà Rịa – Vũng Tàu.": {
+  "lat": 10.6496218,
+  "lng": 107.2707649,
+  "level": "residential",
+  "match": "Binh Gia, Xã Bình Giã, Thành phố Hồ Chí Minh, 78607, Việt Nam"
+ },
+ "230 Đường Lưu Chí Hiếu, Rạch Dừa, Hồ Chí Minh": {
+  "lat": 10.3873572,
+  "lng": 107.1100555,
+  "level": "road",
+  "match": "Hẻm 140/12 Đường Lưu Chí Hiếu, Nam Đồng, Phường Rạch Dừa, Thành phố Hồ Chí Minh, 78000, Vi"
+ },
+ "242 Thống Nhất, Tam Thắng, Hồ Chí Minh": {
+  "lat": 10.3540858,
+  "lng": 107.0870564,
+  "level": "primary",
+  "match": "Đường 2 Tháng 9, Khu phố 15, Phường Tam Thắng, Thành phố Hồ Chí Minh, 76666, Việt Nam"
+ },
+ "96 Đ. 30 Tháng 4, Rạch Dừa, Hồ Chí Minh": {
+  "lat": 10.3875355,
+  "lng": 107.0955218,
+  "level": "primary",
+  "match": "Đường 30 Tháng 4, Phước Hòa, Phường Rạch Dừa, Thành phố Hồ Chí Minh, 78860, Việt Nam"
+ },
+ "39 Thống Nhất, Vũng Tàu, Hồ Chí Minh": {
+  "lat": 10.3475161,
+  "lng": 107.0798544,
+  "level": "amenity",
+  "match": "Trường Tiểu học Bàu Sen, 39, Thống Nhất, Khu phố 16, Phường Vũng Tàu, Thành phố Hồ Chí Min"
+ },
+ "80a Bến Nôm, Rạch Dừa, Hồ Chí Minh": {
+  "lat": 10.3934221,
+  "lng": 107.1122376,
+  "level": "residential",
+  "match": "Bến Nôm, Nam Đồng, Phường Rạch Dừa, Thành phố Hồ Chí Minh, 78000, Việt Nam"
+ },
+ "150 QL55, Hồ Tràm, Hồ Chí Minh": {
+  "lat": 10.4752337,
+  "lng": 107.4355467,
+  "level": "village",
+  "match": "Hồ Tràm, Thành phố Hồ Chí Minh, 78507, Việt Nam"
+ },
+ "Trường THCS Huỳnh Tịnh Của, 167/14 Võ Thị Sáu, Long Điền, Hồ Chí Minh, Việt Nam": {
+  "lat": 10.497372,
+  "lng": 107.2032755,
+  "level": "secondary",
+  "match": "Võ Thị Sáu, Khu phố Long Tâm, Phường Bà Rịa, Xã Long Điền, Thành phố Hồ Chí Minh, 78406, V"
+ },
+ "68 Trần Hưng Đạo, Ngãi Giao, Hồ Chí Minh": {
+  "lat": 10.6513999,
+  "lng": 107.2424431,
+  "level": "tertiary",
+  "match": "Trần Hưng Đạo, Khu phố 3, Xã Ngãi Giao, Thành phố Hồ Chí Minh, Việt Nam"
+ },
+ "Số 386 Hùng Vương, Ngãi Giao, Hồ Chí Minh, Vietnam": {
+  "lat": 10.6551743,
+  "lng": 107.2471925,
+  "level": "trunk",
+  "match": "Hùng Vương, Phú Giao 1, Xã Ngãi Giao, Thành phố Hồ Chí Minh, 78606, Việt Nam"
+ },
+ "Phuoc Hai, Ho Chi Minh, Vietnam": {
+  "lat": 10.4257988,
+  "lng": 107.2921241,
+  "level": "town",
+  "match": "Xã Phước Hải, Thành phố Hồ Chí Minh, 78313, Việt Nam"
+ },
+ "65 Bùi Xuân Phái, Phường Bà Rịa": {
+  "lat": 10.5054868,
+  "lng": 107.1761653,
+  "level": "residential",
+  "match": "Bùi Xuân Phái, Khu phố Phước Hưng, Phường Bà Rịa, Thành phố Hồ Chí Minh, 78117, Việt Nam"
+ }
+}

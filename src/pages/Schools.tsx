@@ -1,14 +1,16 @@
 import { AlertTriangle, FileDown, MapPin, Star, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
 import clsx from 'clsx'
 import { LessonChip } from '../components/LessonChip'
+import { SchoolAlerts } from '../components/SchoolAlerts'
+import { SchoolMapCard } from '../components/SchoolMapCard'
 import { Badge, Button, Card, Empty, PageHeader } from '../components/ui'
-import { coverage } from '../domain/issues'
+import { coverage, schoolLoad, touchesSchool, type Issue } from '../domain/issues'
 import { byTime } from '../domain/route'
 import { dayLabel, weekDates } from '../domain/time'
-import type { School } from '../domain/types'
-import { useWeekContext, type Ctx } from '../hooks'
+import { teacherLabel, type School } from '../domain/types'
+import { useWeekContext, useWeekIssues, type Ctx } from '../hooks'
 import { exportSchoolSchedule } from '../services/exports'
 import { useStore } from '../store'
 
@@ -16,14 +18,11 @@ export function SchoolsPage() {
   const { id } = useParams()
   const ctx = useWeekContext()
   const [q, setQ] = useState('')
-  const stats = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const l of ctx.week.lessons) m.set(l.schoolId, (m.get(l.schoolId) ?? 0) + 1)
-    return m
-  }, [ctx.week.lessons])
+  const stats = useMemo(() => schoolLoad(ctx.week.lessons), [ctx.week.lessons])
+  const issues = useWeekIssues(ctx)
   const list = ctx.world.schools
     .filter((s) => s.fullName.toLowerCase().includes(q.trim().toLowerCase()))
-    .sort((a, b) => Number(!!stats.get(b.id)) - Number(!!stats.get(a.id)) || a.fullName.localeCompare(b.fullName, 'vi'))
+    .sort((a, b) => (stats.get(b.id) ?? 0) - (stats.get(a.id) ?? 0) || a.fullName.localeCompare(b.fullName, 'vi'))
   const school = (id ? ctx.schoolById.get(id) : undefined) ?? list[0]
 
   return (
@@ -39,12 +38,14 @@ export function SchoolsPage() {
           ))}
         </nav>
       </Card>
-      {school ? <SchoolDetail key={school.id} school={school} ctx={ctx} /> : <Empty>Không có trường nào.</Empty>}
+      {school ? <SchoolDetail key={school.id} school={school} ctx={ctx} issues={issues.filter((i) => touchesSchool(i, school.id))} /> : <Empty>Không có trường nào.</Empty>}
     </div>
   )
 }
 
-function SchoolDetail({ school: s, ctx }: { school: School; ctx: Ctx }) {
+function SchoolDetail({ school: s, ctx, issues }: { school: School; ctx: Ctx; issues: Issue[] }) {
+  const [activeIssue, setActiveIssue] = useState<Issue | null>(null)
+  const mapRef = useRef<HTMLDivElement>(null)
   const updateSchool = useStore((st) => st.updateSchool)
   const lessons = ctx.week.lessons.filter((l) => l.schoolId === s.id)
   const dates = weekDates(ctx.week.startDate).filter((d, i) => i < 5 || lessons.some((l) => l.date === d))
@@ -74,6 +75,11 @@ function SchoolDetail({ school: s, ctx }: { school: School; ctx: Ctx }) {
           </div>
         </div>
       )}
+      <SchoolAlerts issues={issues} schoolId={s.id} ctx={ctx} active={activeIssue} onShowOnMap={(i) => {
+        setActiveIssue(i)
+        mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }} />
+      <div ref={mapRef}><SchoolMapCard school={s} ctx={ctx} issues={issues} active={activeIssue} onSelect={setActiveIssue} /></div>
       <Card title="Lịch học trong tuần">
         {lessons.length === 0 ? <Empty>Tuần này trường chưa có ca nào.</Empty> : (
           <div className="grid gap-px overflow-x-auto bg-slate-100" style={{ gridTemplateColumns: `repeat(${dates.length}, minmax(130px, 1fr))` }}>
@@ -112,7 +118,7 @@ function ReferEditor({ school: s, ctx }: { school: School; ctx: Ctx }) {
         <div className="flex flex-wrap gap-1.5">
           {s.referredTeacherIds.map((id) => (
             <span key={id} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 py-0.5 pl-2.5 pr-1 text-emerald-900">
-              {ctx.teacherById.get(id)?.name ?? id}
+              {ctx.teacherById.get(id) ? teacherLabel(ctx.teacherById.get(id)!) : id}
               <button aria-label="Bỏ khỏi danh sách Refer" className="rounded-full p-0.5 hover:bg-emerald-200" onClick={() => toggleRefer(s.id, id)}><X size={12} /></button>
             </span>
           ))}
@@ -120,7 +126,7 @@ function ReferEditor({ school: s, ctx }: { school: School; ctx: Ctx }) {
         </div>
         <select aria-label="Thêm giáo viên Refer" value="" onChange={(e) => e.target.value && toggleRefer(s.id, e.target.value)}>
           <option value="">+ Thêm giáo viên</option>
-          {others.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.id})</option>)}
+          {others.map((t) => <option key={t.id} value={t.id}>{teacherLabel(t)}</option>)}
         </select>
       </div>
     </Card>

@@ -7,6 +7,7 @@ import { kmKey, routeForWeek } from './domain/route'
 import { addDays, weekDates } from './domain/time'
 import { DEFAULT_SETTINGS, needsTeacher, type Lesson, type Leave, type School, type Session, type Settings, type Teacher, type Week } from './domain/types'
 import { cloneWeek } from './domain/weeks'
+import { applyLeave, revertLeave } from './domain/leave'
 import { subjectCode, type OcrRow } from './domain/ocr-parse'
 import type { ParsedLesson, ParsedTeacher, PreferenceRow } from './domain/sheet-grid'
 
@@ -119,22 +120,25 @@ export const useStore = create<State>()(
             }
           }
           set((s) => ({ leaves: [...s.leaves, ...add] }))
+          const range = { teacherId, from, to, sessions }
           let flagged = 0
           for (const w of get().weeks.filter((x) => x.status === 'planning')) {
-            editWeek(w.id, (ls) =>
-              ls.map((l) => {
-                if (l.teacherId === teacherId && l.status === 'assigned' && l.date >= from && l.date <= to && sessions.includes(l.session)) {
-                  flagged++
-                  return { ...l, teacherId: null, originalTeacherId: teacherId, status: 'needs_cover' as const }
-                }
-                return l
-              }),
-            )
+            editWeek(w.id, (ls) => {
+              const next = applyLeave(ls, range)
+              flagged += next.filter((l, i) => l !== ls[i]).length
+              return next
+            })
           }
           return flagged
         },
 
-        removeLeave: (id) => set((s) => ({ leaves: s.leaves.filter((l) => l.id !== id) })),
+        removeLeave: (id) => {
+          const leave = get().leaves.find((l) => l.id === id)
+          if (!leave) return
+          set((s) => ({ leaves: s.leaves.filter((l) => l.id !== id) }))
+          const range = { teacherId: leave.teacherId, from: leave.date, to: leave.date, sessions: [leave.session] }
+          for (const w of get().weeks.filter((x) => x.status === 'planning')) editWeek(w.id, (ls) => revertLeave(ls, range))
+        },
         updateTeacher: (id, patch) => set((s) => ({ teachers: s.teachers.map((t) => (t.id === id ? { ...t, ...patch } : t)) })),
         updateSchool: (id, patch) => set((s) => ({ schools: s.schools.map((x) => (x.id === id ? { ...x, ...patch } : x)) })),
 
@@ -199,7 +203,7 @@ export const useStore = create<State>()(
           const known = new Set(state.teachers.map((t) => t.id))
           const addTeachers: Teacher[] = teachers.filter((t) => !known.has(t.id)).map((t) => ({
             id: t.id, name: t.name, phone: t.phone, district: t.district?.toUpperCase() ?? null, address: t.address, officeId: OFFICE_OF(t.office),
-            isCollaborator: t.id.startsWith('CTV'), isManager: false, active: true, track: null, subjects: [], gender: null, maxKm: null, preferences: [],
+            isCollaborator: t.id.startsWith('CTV'), isManager: false, active: true, track: null, subjects: [], gender: null, maxKm: null, areas: [], onlineOnly: false, preferences: [],
           }))
           const bySchool = new Map(state.schools.map((s) => [normName(s.fullName), s.id]))
           const addSchools: School[] = []
@@ -267,7 +271,26 @@ export const useStore = create<State>()(
     },
     {
       name: 'gaia-scheduling',
-      version: 1,
+      version: 2,
+      // Bản lưu cũ: giữ lịch và các chỉnh sửa của điều phối, nạp thêm địa chỉ, toạ độ, khu vực mới.
+      migrate: (persisted) => {
+        const p = persisted as Partial<State>
+        const oldTeachers = new Map((p.teachers ?? []).map((t) => [t.id, t]))
+        const oldSchools = new Map((p.schools ?? []).map((x) => [x.id, x]))
+        return {
+          ...p,
+          offices: seed.offices,
+          distances: seed.distances,
+          teachers: seed.teachers.map((t) => {
+            const old = oldTeachers.get(t.id)
+            return old ? { ...t, gender: old.gender, maxKm: old.maxKm, preferences: old.preferences } : t
+          }),
+          schools: seed.schools.map((x) => {
+            const old = oldSchools.get(x.id)
+            return old ? { ...x, referredTeacherIds: old.referredTeacherIds, referSource: old.referSource, genderPreference: old.genderPreference } : x
+          }),
+        } as State
+      },
       storage: createJSONStorage(() => localStorage),
       partialize: ({ teachers, schools, offices, leaves, distances, weeks, settings, kmOverrides, activeWeekId, nextId, anonymized }) => ({ teachers, schools, offices, leaves, distances, weeks, settings, kmOverrides, activeWeekId, nextId, anonymized }),
       // Bản lưu từ seed khác (ẩn danh <-> dữ liệu thật) thì bỏ, tránh lẫn dữ liệu.

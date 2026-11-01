@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Chuyển workbook lịch (LỊCH VŨNG TÀU) thành seed JSON cho frontend.
 
-    python scripts/extract_workbook.py <file.xlsx> src/data/seed.local.json
-    python scripts/extract_workbook.py <file.xlsx> src/data/seed.json --anonymize
+    python scripts/extract_workbook.py <file.xlsx> src/data/seed.local.json --data data.xlsx
+    python scripts/extract_workbook.py <file.xlsx> src/data/seed.json --data data.xlsx --anonymize
+
+data.xlsx bổ sung địa chỉ trường, km chính thức từ văn phòng, địa chỉ và khu vực dạy của giáo viên.
 
 seed.local.json chứa dữ liệu cá nhân thật (SĐT, địa chỉ nhà) và không được commit/deploy.
 seed.json là bản đã ẩn danh, dùng cho bản build/demo.
@@ -15,8 +17,14 @@ import re
 import statistics
 import unicodedata
 
+import os
+import sys
+
 import openpyxl
 from openpyxl.utils import column_index_from_string
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from geo import decode_short_plus_code, haversine  # noqa: E402
 
 FILL_STATUS = {
     "FF000000": "sub", "FF980000": "sub", "FF4A86E8": "sub",
@@ -40,6 +48,7 @@ SCHOOL_ALIASES = {
     "TH Phước Bửu - VT": "TH Phước Bửu - Hồ Tràm",
     "Tiểu học Phước Hưng – Long Điền": "TH Phước Hưng - Long Điền",
     "TH Phước Hải  - Phước Hải": "TH Phước Hải - Phước Hải",
+    "TH PHƯỚC BỬU": "TH Phước Bửu - Hồ Tràm",
 }
 
 
@@ -202,11 +211,103 @@ def build_distances(weeks, teachers, schools_by_name):
     return {"home": med(home), "office": med(office), "pair": med(pair)}
 
 
+# Kết quả tra địa chỉ ở cấp xã/phường trở lên quá thô để coi là vị trí của trường.
+COARSE_LEVELS = {"village", "town", "city", "suburb", "hamlet", "municipality", "quarter", "neighbourhood", "county", "state", "city_district", "district"}
+# Các khu vực giáo viên đăng ký trong cột KHU VỰC.
+AREAS = ["PHÚ MỸ", "CHÂU ĐỨC", "BÀ RỊA", "VŨNG TÀU", "PHƯỚC HẢI"]
+
+
+def join_data_file(path, schools, teachers, distances, offices):
+    """Nạp data.xlsx: địa chỉ + toạ độ trường, km chính thức từ văn phòng, địa chỉ + khu vực GV."""
+    book = openpyxl.load_workbook(path, data_only=True)
+    cache_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "street-geocache.json")
+    cache = json.load(open(cache_path, encoding="utf-8")) if os.path.exists(cache_path) else {}
+    locate = lambda addr: decode_short_plus_code(addr) and (*decode_short_plus_code(addr), "pluscode")
+
+    def street(addr):
+        hit = cache.get(addr)
+        return (hit["lat"], hit["lng"], "street") if hit and hit.get("level") not in COARSE_LEVELS else None
+
+    office_official = {}
+    for r in book["Sheet1"].iter_rows(min_row=2, values_only=True):
+        if not r[2]:
+            continue
+        full = school_name(r[4])
+        addr = clean(r[7])
+        if full not in schools:
+            parts = [p.strip() for p in re.split(r"\s[-–]\s", full, maxsplit=1)]
+            schools[full] = {"id": slug(full), "fullName": full, "name": parts[0], "region": clean(r[3]), "address": None, "consultant": None,
+                             "programs": [], "isExternal": False, "referredTeacherIds": [], "referSource": "derived"}
+        s = schools[full]
+        s["address"] = addr
+        pos = locate(addr or "") or street(addr)
+        if pos:
+            s["geo"] = {"lat": pos[0], "lng": pos[1], "source": pos[2]}
+        for col, office in ((5, "BR"), (6, "PM")):
+            if isinstance(r[col], (int, float)):
+                office_official[f'{office}|{s["id"]}'] = r[col]
+    changed = sum(1 for k, v in office_official.items() if k in distances["office"] and distances["office"][k] != v)
+    print(f"  km văn phòng chính thức: {len(office_official)} cặp, {changed} cặp khác số suy từ lịch sử")
+    distances["office"].update(office_official)
+
+    for o in offices:
+        addr = {"BR": "65 Bùi Xuân Phái, Phường Bà Rịa", "PM": "Green Aire office, J348+3JW, Cách Mạng Tháng 8, Phú Mỹ"}[o["id"]]
+        o["address"] = addr
+        pos = locate(addr) or street(addr)
+        if pos:
+            o["geo"] = {"lat": pos[0], "lng": pos[1], "source": pos[2]}
+
+    # Đường bộ không thể ngắn hơn đường chim bay: lệch nhiều nghĩa là điểm tra sai.
+    by_id = {s["id"]: s for s in schools.values()}
+    point = lambda g: (g["lat"], g["lng"])
+    suspect = collections.Counter()
+    for key, km in distances["pair"].items():
+        a, b = (by_id.get(x, {}).get("geo") for x in key.split("|"))
+        if a and b and haversine(point(a), point(b)) > km + 4:
+            for x, g in zip(key.split("|"), (a, b)):
+                if g["source"] == "street":
+                    suspect[x] += 1
+    office_geo = {o["id"]: o.get("geo") for o in offices}
+    for key, km in office_official.items():
+        o, sid = key.split("|")
+        g = by_id.get(sid, {}).get("geo")
+        if g and office_geo[o] and haversine(point(g), point(office_geo[o])) > km + 4:
+            print("  lệch văn phòng", key, "chim bay", round(haversine(point(g), point(office_geo[o])), 1), "km, ghi", km, "km, nguồn", g["source"])
+            if g["source"] == "street":
+                suspect[sid] += 1
+    for sid in suspect:
+        print("  bỏ toạ độ cấp đường không khớp km đã ghi:", sid)
+        del by_id[sid]["geo"]
+
+    # Trường chưa có toạ độ tin cậy: đặt ở tâm khu vực và ghi rõ là gần đúng.
+    anchors = collections.defaultdict(list)
+    for s in schools.values():
+        if s.get("geo") and s["region"]:
+            anchors[s["region"].strip().lower()].append(point(s["geo"]))
+    for s in schools.values():
+        pts = anchors.get((s["region"] or "").strip().lower())
+        if not s.get("geo") and pts:
+            s["geo"] = {"lat": round(statistics.mean(p[0] for p in pts), 5), "lng": round(statistics.mean(p[1] for p in pts), 5), "source": "region"}
+
+    for r in book["Sheet2"].iter_rows(min_row=2, values_only=True):
+        code = clean(r[1])
+        t = teachers.get(code)
+        if not t:
+            continue
+        addr, note, area = clean(r[3]), clean(r[4]), (clean(r[5]) or "").upper()
+        if addr and not addr.upper().startswith("VP "):
+            t["address"] = addr
+        t["areas"] = [a for a in AREAS if a in area]
+        # Không lưu lý do cụ thể trong ghi chú, chỉ giữ thông tin cần cho xếp lịch.
+        t["onlineOnly"] = "ONLINE" in (note or "").upper()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("workbook")
     ap.add_argument("out")
     ap.add_argument("--anonymize", action="store_true")
+    ap.add_argument("--data", help="data.xlsx: địa chỉ trường và giáo viên")
     args = ap.parse_args()
     wb = openpyxl.load_workbook(args.workbook, data_only=True)
     formulas = openpyxl.load_workbook(args.workbook)
@@ -289,6 +390,11 @@ def main():
         t.update(gender=None, maxKm=None, preferences=[])
 
     distances = build_distances(weeks, teachers, schools)
+    offices = [{"id": "BR", "name": "VP Bà Rịa", "address": None}, {"id": "PM", "name": "VP Phú Mỹ", "address": None}]
+    for t in teachers.values():
+        t.update(areas=[], onlineOnly=False)
+    if args.data:
+        join_data_file(args.data, schools, teachers, distances, offices)
 
     # Gộp leave theo (GV, ngày, buổi), bỏ trùng.
     seen, leave_list = set(), []
@@ -308,7 +414,7 @@ def main():
             l.setdefault("originalTeacherId", None)
 
     out = {"meta": {"source": "LỊCH VŨNG TÀU NH 2026-2027", "anonymized": args.anonymize},
-           "offices": [{"id": "BR", "name": "VP Bà Rịa", "address": None}, {"id": "PM", "name": "VP Phú Mỹ", "address": None}],
+           "offices": offices,
            "teachers": sorted(teachers.values(), key=lambda t: t["id"]), "schools": sorted(schools.values(), key=lambda s: s["fullName"]),
            "leaves": leave_list, "weeks": weeks, "distances": distances}
 
@@ -329,6 +435,9 @@ def main():
     print(f"{args.out}: {len(out['teachers'])} GV, {len(out['schools'])} trường, {len(weeks)} tuần, {n} ca, {len(leave_list)} nghỉ")
     for w in weeks:
         print(" ", w["label"], w["status"], len(w["lessons"]), collections.Counter(l["status"] for l in w["lessons"]))
+    src = collections.Counter((s.get("geo") or {}).get("source", "none") for s in out["schools"])
+    print("  toạ độ trường:", dict(src), "| có địa chỉ:", sum(1 for s in out["schools"] if s["address"]))
+    print("  GV có khu vực:", sum(1 for t in out["teachers"] if t["areas"]), "| chỉ online:", sum(1 for t in out["teachers"] if t["onlineOnly"]))
     print("  Refer:", sum(len(s["referredTeacherIds"]) for s in out["schools"]), "| km:", {k: len(v) for k, v in distances.items()})
 
 

@@ -1,7 +1,7 @@
 import type { Workbook, Worksheet } from 'exceljs'
 import { byTime } from '../domain/route'
 import { dayLabel, SESSION_LABEL, weekDates } from '../domain/time'
-import type { Lesson } from '../domain/types'
+import { teacherLabel, type Lesson } from '../domain/types'
 import { weekCosts, type Ctx } from '../hooks'
 
 const download = (buffer: ArrayBuffer, filename: string) => {
@@ -36,7 +36,7 @@ function addTable(ws: Worksheet, title: string, header: string[], rows: (string 
 }
 
 const statusText = (l: Lesson) =>
-  l.status === 'school_off' ? 'Trường báo nghỉ' : l.status === 'replaced' ? 'Đã có người thay' : l.status === 'needs_cover' ? 'CẦN GIÁO VIÊN' : l.type === 'substitute' ? 'Dạy thay' : l.type === 'makeup' ? 'Dạy bù' : ''
+  l.status === 'school_off' ? 'Trường báo nghỉ' : l.status === 'cancelled' ? 'Huỷ do GV nghỉ' : l.status === 'replaced' ? 'Đã có người thay' : l.status === 'needs_cover' ? 'CẦN GIÁO VIÊN' : l.type === 'substitute' ? 'Dạy thay' : l.type === 'makeup' ? 'Dạy bù' : ''
 
 const visible = (ctx: Ctx) => ctx.week.lessons.filter((l) => l.status !== 'replaced')
 
@@ -47,7 +47,7 @@ const teacherRows = (ctx: Ctx, teacherId: string) =>
 
 const schoolRows = (ctx: Ctx, schoolId: string) =>
   visible(ctx).filter((l) => l.schoolId === schoolId).sort((a, b) => a.date.localeCompare(b.date) || byTime(a, b)).map((l) => [
-    dayLabel(l.date), SESSION_LABEL[l.session], l.start && l.end ? `${l.start}–${l.end}` : `Tiết ${l.period}`, l.className, l.subject, l.teacherId ? (ctx.teacherById.get(l.teacherId)?.name ?? l.teacherId) : '', statusText(l),
+    dayLabel(l.date), SESSION_LABEL[l.session], l.start && l.end ? `${l.start}–${l.end}` : `Tiết ${l.period}`, l.className, l.subject, l.teacherId ? (ctx.teacherById.get(l.teacherId) ? teacherLabel(ctx.teacherById.get(l.teacherId)!) : l.teacherId) : '', statusText(l),
   ])
 
 const newBook = async (): Promise<Workbook> => {
@@ -58,7 +58,7 @@ const newBook = async (): Promise<Workbook> => {
 export async function exportTeacherSchedule(ctx: Ctx, teacherId: string) {
   const wb = await newBook()
   const t = ctx.teacherById.get(teacherId)!
-  addTable(wb.addWorksheet('Lịch dạy'), `Lịch dạy ${t.name} · ${ctx.week.startDate} → ${ctx.week.endDate}`, ['Ngày', 'Buổi', 'Giờ', 'Trường', 'Lớp', 'Môn', 'Ghi chú'], teacherRows(ctx, teacherId), [14, 8, 14, 38, 10, 12, 18])
+  addTable(wb.addWorksheet('Lịch dạy'), `Lịch dạy ${teacherLabel(t)} · ${ctx.week.startDate} → ${ctx.week.endDate}`, ['Ngày', 'Buổi', 'Giờ', 'Trường', 'Lớp', 'Môn', 'Ghi chú'], teacherRows(ctx, teacherId), [14, 8, 14, 38, 10, 12, 18])
   download(await wb.xlsx.writeBuffer() as ArrayBuffer, `lich-${teacherId}-${ctx.week.startDate}.xlsx`)
 }
 
@@ -90,7 +90,7 @@ export async function exportWeek(ctx: Ctx) {
   }
   for (const t of ctx.world.teachers) {
     const rows = teacherRows(ctx, t.id)
-    if (rows.length) addTable(wb.addWorksheet(unique(`GV ${t.id}`)), `Lịch dạy ${t.name}`, ['Ngày', 'Buổi', 'Giờ', 'Trường', 'Lớp', 'Môn', 'Ghi chú'], rows, [14, 8, 14, 38, 10, 12, 18])
+    if (rows.length) addTable(wb.addWorksheet(unique(t.name.includes(t.id) ? t.name : `${t.id} ${t.name}`)), `Lịch dạy ${teacherLabel(t)}`, ['Ngày', 'Buổi', 'Giờ', 'Trường', 'Lớp', 'Môn', 'Ghi chú'], rows, [14, 8, 14, 38, 10, 12, 18])
   }
   for (const s of ctx.world.schools) {
     const rows = schoolRows(ctx, s.id)

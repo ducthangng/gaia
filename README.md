@@ -9,17 +9,26 @@ npm run build   # luôn dùng seed đã ẩn danh
 
 ## Dữ liệu
 
-`scripts/extract_workbook.py` chuyển workbook lịch thành seed JSON (cần `openpyxl`):
+`scripts/extract_workbook.py` chuyển workbook lịch và `data.xlsx` (địa chỉ trường, km từ văn phòng, địa chỉ và khu vực giáo viên) thành seed JSON. Cần `openpyxl`:
 
 ```bash
-python3 scripts/extract_workbook.py "<file>.xlsx" src/data/seed.local.json
-python3 scripts/extract_workbook.py "<file>.xlsx" src/data/seed.json --anonymize
+python3 scripts/geocode_schools.py data.xlsx   # chỉ khi địa chỉ trường dạng chữ thay đổi
+python3 scripts/extract_workbook.py "<lịch>.xlsx" src/data/seed.local.json --data data.xlsx
+python3 scripts/extract_workbook.py "<lịch>.xlsx" src/data/seed.json --data data.xlsx --anonymize
 ```
 
 - `seed.local.json`: có SĐT và địa chỉ nhà của giáo viên. Chỉ nạp khi chạy `dev`, không commit, không deploy.
 - `seed.json`: đã ẩn danh. Là dữ liệu của mọi bản build, an toàn cho Vercel.
 
 Chỉnh sửa trên giao diện được lưu ở `localStorage` của trình duyệt cho tới khi có backend.
+
+### Toạ độ và bản đồ
+
+- Plus Code được giải ngay trên máy (`scripts/geo.py`), không gọi dịch vụ ngoài.
+- Địa chỉ trường dạng chữ tra qua Nominatim (OpenStreetMap). Địa chỉ nhà giáo viên không bao giờ được gửi đi.
+- Điểm tra được bị loại nếu đường chim bay dài hơn số km đã ghi; trường chưa có vị trí tin cậy đặt ở tâm khu vực và ghi rõ "gần đúng".
+- Bản đồ dùng Leaflet với tile OpenStreetMap, đường đi lấy từ máy chủ demo của OSRM, cả hai đều không cần API key. Khi dùng thật nhiều nên chuyển sang nhà cung cấp có cam kết dịch vụ.
+- Link "Chỉ đường Google Maps" không cần API key. Nhúng hẳn Google Maps vào trang thì cần API key và tài khoản thanh toán.
 
 ## Quy tắc tính lấy từ workbook
 

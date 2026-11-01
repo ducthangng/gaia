@@ -1,15 +1,21 @@
+import { writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import seedJson from '../data/seed.json'
 import { blockers, leaveCovers, preferenceViolations } from './constraints'
 import { buildContext, type World } from './context'
-import { googleDirectionsUrl, haversineKm, isPrecise, parseLatLng, roadKm, wardOf } from './geo'
+import { decodePlusCode, googleDirectionsUrl, haversineKm, isPrecise, parseLatLng, roadKm, wardOf } from './geo'
 import { movementTo } from './movement'
+import { applyChanges, MAX_LOAD_SHIFT, suggestOptimizations } from './optimize'
+import { applySchoolAddress, missingSchoolFields, missingTeacherFields, parseCoordinate } from './data-quality'
+import { applyProfile, dropHomeKm, dropHomeLegs, locateAddress, profileErrors, profileFrom } from './teacher-profile'
+import { deriveRoute } from './route'
 import { axisHeight, axisY, buildAxis, hourRange, layoutDay, prettyName } from './timetable'
 import { applyBulk, applyDraft, draftErrors, draftFrom, inScope, newLesson, type BulkScope } from './lesson-edit'
 import { healthOf, issueScore, newIssues, schoolLoad, touchesSchool, weekIssues } from './issues'
 import { affectedByLeave, applyLeave, applyLessonLeave, revertLeave, revertLessonLeave } from './leave'
 import { DEFAULT_SETTINGS, teacherLabel, type GeoPoint, type Lesson, type Seed, type Teacher } from './types'
 
+const weekDatesOf = (start: string) => Array.from({ length: 7 }, (_, i) => new Date(Date.parse(start) + i * 864e5).toISOString().slice(0, 10))
 const seed = seedJson as unknown as Seed
 const world: World = { ...seed, settings: DEFAULT_SETTINGS, kmOverrides: {} }
 const week = seed.weeks.at(-1)!
@@ -391,5 +397,135 @@ describe('xin nghỉ theo ca', () => {
     const whole = { ...leave, lessonId: undefined, start: undefined, end: undefined }
     expect(leaveCovers(whole, b)).toBe(true)
     expect(leaveCovers(whole, lesson({ session: 'PM', start: '14:00', end: '14:35' }))).toBe(false)
+  })
+})
+
+describe('sửa thông tin giáo viên', () => {
+  const places = [{ name: 'Rạch Dừa', lat: 10.37, lng: 107.11 }, { name: 'Bà Rịa', lat: 10.5, lng: 107.17 }]
+  it('Plus Code giải đúng như bản Python', () => {
+    expect(decodePlusCode('J348+3JW')).toEqual({ lat: 10.605237, lng: 107.066578 })
+    const q = decodePlusCode('H6H5+F84, Nghĩa Thành')!
+    expect(q.lat).toBeCloseTo(10.578637, 5)
+    expect(q.lng).toBeCloseTo(107.208328, 5)
+    expect(decodePlusCode('12 Lê Lợi')).toBeNull()
+  })
+  it('định vị địa chỉ: Plus Code chính xác, tên phường gần đúng, kể cả viết sai dấu hay lỗi gõ', () => {
+    expect(locateAddress('G6Q7+H58, Bà Rịa', places)).toMatchObject({ geo: { source: 'pluscode' }, area: 'Bà Rịa' })
+    expect(locateAddress('1 Hàn Thuyên, P. Rach Dua', places)).toMatchObject({ geo: { source: 'ward', lat: 10.37 }, area: 'Rạch Dừa' })
+    expect(locateAddress('32 Cao Bá Quát, Phường Rạch Rừa', places).area).toBe('Rạch Dừa')
+    expect(locateAddress('Đâu đó', places)).toEqual({})
+  })
+  it('đổi địa chỉ thì định vị lại; không đổi địa chỉ thì giữ nguyên vị trí', () => {
+    const t = teacher({ address: 'Cũ', homeGeo: { lat: 1, lng: 1, source: 'pluscode' }, homeArea: 'Cũ', phone: null })
+    const same = applyProfile(t, { ...profileFrom(t), phone: '0901234567' }, places)
+    expect(same.homeGeo).toEqual(t.homeGeo)
+    expect(same.phone).toBe('0901234567')
+    const moved = applyProfile(t, { ...profileFrom(t), address: '5 Lê Lợi, Rạch Dừa' }, places)
+    expect(moved).toMatchObject({ homeArea: 'Rạch Dừa', homeGeo: { source: 'ward' } })
+    const unknown = applyProfile(t, { ...profileFrom(t), address: 'Không rõ' }, places)
+    expect(unknown.homeGeo).toBeUndefined()
+  })
+  it('chuyển nhà thì bỏ km từ nhà đã ghi của đúng người đó', () => {
+    const d = { home: { 'A|s': 5, 'AB|s': 6 }, office: {}, pair: {} }
+    expect(dropHomeKm(d, 'A').home).toEqual({ 'AB|s': 6 })
+    const leg = (teacherId: string, start: 'N' | 'V') => ({ teacherId, date: 'd', session: 'AM' as const, period: 1, start, km: 1, cost: 0 })
+    expect(dropHomeLegs([leg('A', 'N'), leg('A', 'V'), leg('B', 'N')], 'A').map((l) => l.start + l.teacherId)).toEqual(['VA', 'NB'])
+  })
+  it('kiểm tra dữ liệu nhập', () => {
+    const d = profileFrom(teacher())
+    expect(profileErrors({ ...d, name: ' ' })).toEqual(['Cần có họ tên'])
+    expect(profileErrors({ ...d, name: 'A', phone: 'abc' })).toEqual(['Số điện thoại chưa đúng'])
+    expect(profileErrors({ ...d, name: 'A', phone: '', maxKm: '-3' })).toHaveLength(1)
+    expect(profileErrors({ ...d, name: 'A', phone: '0332 999 864', maxKm: '20' })).toEqual([])
+  })
+})
+
+describe('đề xuất tối ưu trên dữ liệu thật', () => {
+  const ctx = buildContext(week, world)
+  const t0 = Date.now()
+  const list = suggestOptimizations(ctx)
+  const ms = Date.now() - t0
+  const realCost = (lessons: Lesson[]) => {
+    const c = buildContext({ ...week, lessons }, world)
+    return world.teachers.reduce((sum, t) => sum + weekDatesOf(week.startDate).reduce((x, d) => x + deriveRoute(t, d, c.dayLessons.get(`${t.id}|${d}`) ?? [], week.id, [], c).cost, 0), 0)
+  }
+  it('chạy đủ nhanh và có đề xuất', () => {
+    expect(list.length).toBeGreaterThan(0)
+    expect(ms).toBeLessThan(4000)
+  })
+  it('không đề xuất nào làm phát sinh trùng lịch hay không kịp', () => {
+    const before = weekIssues(ctx)
+    for (const s of list) {
+      const after = weekIssues(buildContext({ ...week, lessons: applyChanges(week.lessons, s.changes) }, world))
+      expect(newIssues(before, after).filter((i) => ['overlap', 'travel', 'leave', 'uncovered'].includes(i.kind)), s.title).toEqual([])
+    }
+  })
+  it('số tiết kiệm công bố đúng bằng chênh lệch chi phí thực tế', () => {
+    const base = realCost(week.lessons)
+    for (const s of list.filter((x) => x.kind !== 'fix')) {
+      expect(base - realCost(applyChanges(week.lessons, s.changes)), s.title).toBe(s.saving)
+    }
+  })
+  it('mỗi giáo viên chỉ một đề xuất nên cộng dồn được', () => {
+    const ids = list.flatMap((s) => s.teacherIds)
+    expect(new Set(ids).size).toBe(ids.length)
+    const moves = list.filter((x) => x.kind !== 'fix')
+    const all = moves.flatMap((s) => s.changes)
+    expect(realCost(week.lessons) - realCost(applyChanges(week.lessons, all))).toBe(moves.reduce((a, s) => a + s.saving, 0))
+  })
+  it('không đề xuất nào làm ai tăng giảm quá nhiều ca', () => {
+    for (const s of list) for (const l of s.load) expect(Math.abs(l.after - l.before), s.title).toBeLessThanOrEqual(MAX_LOAD_SHIFT)
+  })
+  it('không đề xuất nào làm giáo viên mất hết ca', () => {
+    for (const s of list) for (const l of s.load) expect(l.after, s.title).toBeGreaterThan(0)
+  })
+  it('không làm xấu nguyện vọng, không giao cho GV chỉ làm online hoặc quản lý', () => {
+    for (const s of list) {
+      expect(s.prefGain).toBeGreaterThanOrEqual(0)
+      for (const c of s.changes) {
+        const t = ctx.teacherById.get(c.teacherId)!
+        expect(t.onlineOnly || t.isManager).toBe(false)
+      }
+    }
+  })
+  it('tuần đã lưu trữ không có đề xuất', () => {
+    const old = seed.weeks[0]
+    expect(suggestOptimizations(buildContext(old, world))).toEqual([])
+  })
+  it('sửa được ca chưa có giáo viên', () => {
+    const open = week.lessons.find((l) => l.status === 'assigned' && l.code === 'S')!
+    const c = buildContext({ ...week, lessons: week.lessons.map((l) => (l.id === open.id ? { ...l, teacherId: null, originalTeacherId: open.teacherId, status: 'needs_cover' as const } : l)) }, world)
+    const fix = suggestOptimizations(c).find((s) => s.kind === 'fix' && s.lessons[0].id === open.id)
+    expect(fix).toBeTruthy()
+    expect(fix!.changes[0].teacherId).not.toBe(open.teacherId)
+  })
+  it('thống kê', () => {
+    const moves = list.filter((x) => x.kind !== 'fix')
+    writeFileSync(process.env.OPT_OUT ?? '/dev/null', JSON.stringify({ ms, n: list.length, byKind: list.reduce<Record<string, number>>((a, s) => ({ ...a, [s.kind]: (a[s.kind] ?? 0) + 1 }), {}), scope: list.reduce<Record<string, number>>((a, s) => ({ ...a, [s.scope]: (a[s.scope] ?? 0) + 1 }), {}), saving: moves.reduce((a, s) => a + s.saving, 0), base: realCost(week.lessons), pref: moves.reduce((a, s) => a + s.prefGain, 0), referLoss: moves.reduce((a, s) => a + s.referLoss, 0), top: list.slice(0, 8).map((s) => [s.title, s.saving, s.prefGain, s.referLoss, s.estimatedKm, s.load]) }, null, 1))
+  })
+})
+
+describe('mức độ đầy đủ thông tin', () => {
+  it('liệt kê đúng thông tin giáo viên còn thiếu', () => {
+    const t = teacher({ phone: null, address: null, areas: [], gender: null, track: null })
+    expect(missingTeacherFields(t)).toEqual(['SĐT', 'Địa chỉ', 'Vị trí nhà', 'Năng lực', 'Khu vực mong muốn', 'Giới tính'])
+    const full = teacher({ phone: '0901234567', address: 'A', homeGeo: { lat: 1, lng: 1, source: 'ward' }, areas: ['BÀ RỊA'], gender: 'F', track: 'TÍCH HỢP' })
+    expect(missingTeacherFields(full)).toEqual([])
+  })
+  it('liệt kê đúng thông tin trường còn thiếu; vị trí gần đúng tính là thiếu', () => {
+    const base = { ...seed.schools[0], address: 'A', geo: { lat: 1, lng: 1, source: 'pluscode' as const } }
+    expect(missingSchoolFields(base, { office: { [`BR|${base.id}`]: 5 } })).toEqual([])
+    expect(missingSchoolFields({ ...base, address: null, geo: { lat: 1, lng: 1, source: 'region' } }, { office: {} })).toEqual(['Địa chỉ', 'Toạ độ chính xác', 'Km từ văn phòng'])
+  })
+  it('sửa địa chỉ trường: Plus Code chính xác; địa chỉ chữ không làm mất toạ độ nhưng hạ xuống gần đúng', () => {
+    const s = { ...seed.schools[0], geo: { lat: 1, lng: 1, source: 'street' as const } }
+    expect(applySchoolAddress(s, 'J348+3JW, Phú Mỹ', []).geo).toMatchObject({ source: 'pluscode', lat: 10.605237 })
+    expect(applySchoolAddress(s, '12 Đường Mới', []).geo).toMatchObject({ source: 'region', lat: 1 })
+    expect(applySchoolAddress({ ...s, geo: { lat: 2, lng: 2, source: 'manual' } }, '12 Đường Mới', []).geo).toMatchObject({ source: 'manual', lat: 2 })
+  })
+  it('nhập toạ độ dạng số hoặc Plus Code', () => {
+    expect(parseCoordinate('10.5, 107.1')).toEqual({ lat: 10.5, lng: 107.1 })
+    expect(parseCoordinate('J348+3JW')).toMatchObject({ lat: 10.605237 })
+    expect(parseCoordinate('abc')).toBeNull()
   })
 })

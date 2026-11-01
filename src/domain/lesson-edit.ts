@@ -41,6 +41,9 @@ function withTeacher(l: Lesson, teacherId: string | null): Pick<Lesson, 'teacher
   return { teacherId, originalTeacherId: original, type, status: settled ? l.status : teacherId ? 'assigned' : 'needs_cover' }
 }
 
+/** Đổi người dạy của một ca, giữ đúng logic dạy thay. */
+export const reassign = (l: Lesson, teacherId: string | null): Lesson => ({ ...l, ...withTeacher(l, teacherId) })
+
 export function applyDraft(l: Lesson, d: LessonDraft): Lesson {
   const subject = d.subject.trim() || null
   const teaching = l.code !== null && TEACHING_CODES.has(l.code)

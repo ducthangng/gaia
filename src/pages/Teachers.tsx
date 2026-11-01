@@ -1,7 +1,10 @@
 import clsx from 'clsx'
-import { ArrowRight, CalendarOff, FileDown, Home, MapPin, Phone, Plus, Trash2 } from 'lucide-react'
+import { ArrowRight, CalendarOff, FileDown, Home, MapPin, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { NavLink, useParams } from 'react-router-dom'
+import { NavLink, useParams, useSearchParams } from 'react-router-dom'
+import { openProfileDialog } from '../components/TeacherProfileDialog'
+import { TeachersTable } from '../components/InfoTables'
+import { ViewSwitch } from '../components/InlineCell'
 import { openLeaveDialog } from '../components/LeaveDialog'
 import { LessonChip } from '../components/LessonChip'
 import { Badge, Button, Card, Empty, PageHeader, Stat } from '../components/ui'
@@ -13,6 +16,12 @@ import { exportTeacherSchedule } from '../services/exports'
 import { useStore } from '../store'
 
 export function TeachersPage() {
+  const [params] = useSearchParams()
+  if (params.get('view') === 'table') return <TeachersTable />
+  return <TeachersDetail />
+}
+
+function TeachersDetail() {
   const { id } = useParams()
   const ctx = useWeekContext()
   const [q, setQ] = useState('')
@@ -23,7 +32,9 @@ export function TeachersPage() {
   const teacher = (id ? ctx.teacherById.get(id) : undefined) ?? list[0]
   const count = (tid: string) => ctx.week.lessons.filter((l) => l.teacherId === tid && l.status === 'assigned').length
   return (
-    <div className="mx-auto grid h-full max-w-[1500px] grid-cols-[260px_minmax(0,1fr)] gap-4">
+    <div className="mx-auto flex h-full max-w-[1500px] flex-col gap-2">
+    <ViewSwitch />
+    <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)] gap-4">
       <Card className="flex min-h-0 flex-col overflow-hidden">
         <div className="border-b border-slate-100 p-2"><input aria-label="Tìm giáo viên" className="w-full" placeholder="Tìm giáo viên, khu vực…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <nav className="min-h-0 flex-1 overflow-y-auto p-1">
@@ -36,6 +47,7 @@ export function TeachersPage() {
         </nav>
       </Card>
       {teacher ? <TeacherDetail key={teacher.id} teacher={teacher} ctx={ctx} /> : <Empty>Không có giáo viên nào.</Empty>}
+    </div>
     </div>
   )
 }
@@ -63,6 +75,7 @@ function TeacherDetail({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
           {t.areas.length > 0 && <span>Khu vực mong muốn: {t.areas.join(', ')}</span>}
         </span>}
         actions={<>
+          <Button onClick={() => openProfileDialog(t.id)}><Pencil size={14} />Sửa thông tin</Button>
           <Button variant="primary" onClick={() => openLeaveDialog({ teacherId: t.id })}><CalendarOff size={14} />Xin nghỉ</Button>
           <Button onClick={() => exportTeacherSchedule(ctx, t.id)}><FileDown size={14} />Excel</Button>
           <Button onClick={() => window.open(`/print/teacher/${t.id}`, '_blank')}><FileDown size={14} />PDF</Button>
@@ -128,7 +141,7 @@ function LegView({ leg, date, teacherId, ctx }: { leg: RouteLeg; date: string; t
       <span className="max-w-64 truncate" title={to}>{to}</span>
       {editable ? (
         <label className="inline-flex items-center gap-0.5 text-xs text-slate-500" title="Sửa số km của chặng này">
-          <input aria-label={`Số km đến ${to}`} type="number" min={0} className="tnum w-12 !px-1 !py-0 text-xs" key={leg.km} defaultValue={leg.km} onBlur={(e) => {
+          <input aria-label={`Số km đến ${to}`} type="number" min={0} step="any" className="no-spin tnum w-16 !px-1.5 !py-0.5 text-right text-xs" key={leg.km} defaultValue={leg.km} onBlur={(e) => {
             const v = Number(e.target.value)
             if (e.target.value !== '' && v !== leg.km) setKm(ctx.week.id, teacherId, date, leg.toSchoolId, v)
           }} />

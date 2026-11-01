@@ -2,6 +2,8 @@ import { AlertTriangle, FileDown, MapPin, PanelLeftClose, PanelLeftOpen, Star, X
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useParams, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
+import { SchoolsTable } from '../components/InfoTables'
+import { ViewSwitch } from '../components/InlineCell'
 import { MovementPanel, type MovementSelection } from '../components/MovementPanel'
 import { WeekTimeGrid } from '../components/WeekTimeGrid'
 import { Badge, Button, Card, Empty, PageHeader } from '../components/ui'
@@ -12,6 +14,12 @@ import { exportSchoolSchedule } from '../services/exports'
 import { useStore } from '../store'
 
 export function SchoolsPage() {
+  const [params] = useSearchParams()
+  if (params.get('view') === 'table') return <SchoolsTable />
+  return <SchoolsDetail />
+}
+
+function SchoolsDetail() {
   const { id } = useParams()
   const ctx = useWeekContext()
   const [q, setQ] = useState('')
@@ -24,7 +32,9 @@ export function SchoolsPage() {
   const school = (id ? ctx.schoolById.get(id) : undefined) ?? list[0]
 
   return (
-    <div className={clsx('mx-auto grid h-full max-w-[1700px] gap-4', listOpen ? 'grid-cols-[250px_minmax(0,1fr)]' : 'grid-cols-[minmax(0,1fr)]')}>
+    <div className="mx-auto flex h-full max-w-[1700px] flex-col gap-2">
+    <ViewSwitch />
+    <div className={clsx('grid min-h-0 w-full flex-1 gap-4', listOpen ? 'grid-cols-[250px_minmax(0,1fr)]' : 'grid-cols-[minmax(0,1fr)]')}>
       {listOpen && <Card className="flex min-h-0 flex-col self-stretch overflow-hidden">
         <div className="border-b border-slate-100 p-2"><input aria-label="Tìm trường" className="w-full" placeholder="Tìm trường…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <nav className="min-h-0 flex-1 overflow-y-auto p-1">
@@ -41,6 +51,7 @@ export function SchoolsPage() {
           {listOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}{listOpen ? 'Ẩn danh sách' : 'Danh sách trường'}
         </Button>
       } /> : <Empty>Không có trường nào.</Empty>}
+    </div>
     </div>
   )
 }

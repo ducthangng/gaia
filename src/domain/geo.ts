@@ -56,3 +56,33 @@ export function wardOf(school: { address: string | null; region: string | null }
   const last = rest.at(-1)?.replace(/^thành phố\s*/i, '')
   return last || fallback
 }
+
+const OLC = '23456789CFGHJMPQRVWX'
+const PLUS_CODE = /\b([23456789CFGHJMPQRVWX]{4})\+([23456789CFGHJMPQRVWX]{2,3})\b/
+/** Tâm Bà Rịa - Vũng Tàu: Plus Code rút gọn trong vùng đều nằm trong phạm vi 0,5 độ quanh điểm này. */
+const OLC_REFERENCE = { lat: 10.5, lng: 107.25 }
+
+/** Giải Plus Code rút gọn ngay trên máy, không gọi dịch vụ nào. */
+export function decodePlusCode(text: string | null | undefined): { lat: number; lng: number } | null {
+  const m = text?.match(PLUS_CODE)
+  if (!m) return null
+  const [head, tail] = [m[1], m[2]]
+  const at = (c: string) => OLC.indexOf(c)
+  let lat = Math.floor(OLC_REFERENCE.lat + 90) + at(head[0]) * 0.05 + at(head[2]) * 0.0025 + at(tail[0]) * 0.000125
+  let lng = Math.floor(OLC_REFERENCE.lng + 180) + at(head[1]) * 0.05 + at(head[3]) * 0.0025 + at(tail[1]) * 0.000125
+  let sizeLat = 0.000125
+  let sizeLng = 0.000125
+  if (tail.length === 3) {
+    sizeLat /= 5
+    sizeLng /= 4
+    lat += Math.floor(at(tail[2]) / 4) * sizeLat
+    lng += (at(tail[2]) % 4) * sizeLng
+  }
+  lat += sizeLat / 2 - 90
+  lng += sizeLng / 2 - 180
+  if (lat <= OLC_REFERENCE.lat - 0.5) lat += 1
+  else if (lat > OLC_REFERENCE.lat + 0.5) lat -= 1
+  if (lng <= OLC_REFERENCE.lng - 0.5) lng += 1
+  else if (lng > OLC_REFERENCE.lng + 0.5) lng -= 1
+  return { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6 }
+}

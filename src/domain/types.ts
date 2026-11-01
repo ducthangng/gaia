@@ -155,6 +155,13 @@ export interface Seed {
   leaves: Leave[]
   weeks: Week[]
   distances: Distances
+  places?: Place[]
+}
+
+export interface Place {
+  name: string
+  lat: number
+  lng: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {

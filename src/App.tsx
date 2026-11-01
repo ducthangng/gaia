@@ -5,6 +5,7 @@ import { BoardPage } from './pages/Board'
 import { CostsPage } from './pages/Costs'
 import { DataPage } from './pages/Data'
 import { ImportPage } from './pages/Import'
+import { OptimizePage } from './pages/Optimize'
 import { PrintPage } from './pages/Print'
 import { SchoolsPage } from './pages/Schools'
 import { SettingsPage } from './pages/Settings'
@@ -19,6 +20,7 @@ export function App() {
         <Route element={<Layout />}>
           <Route index element={<BoardPage />} />
           <Route path="alerts" element={<AlertsPage />} />
+          <Route path="optimize" element={<OptimizePage />} />
           <Route path="schools/:id?" element={<SchoolsPage />} />
           <Route path="teachers/:id?" element={<TeachersPage />} />
           <Route path="costs" element={<CostsPage />} />

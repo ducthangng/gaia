@@ -25,7 +25,7 @@ from openpyxl.utils import column_index_from_string
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from geo import decode_short_plus_code, haversine  # noqa: E402
-from places import place_in_address  # noqa: E402
+from places import PLACES, place_in_address  # noqa: E402
 
 FILL_STATUS = {
     "FF000000": "sub", "FF980000": "sub", "FF4A86E8": "sub",
@@ -464,6 +464,11 @@ def main():
             for l in w["lessons"]:
                 if l["note"] not in ("CS1", "CS2"):
                     l["note"] = None
+
+    # Tâm phường/xã là thông tin công khai: giao diện dùng để định vị khi người dùng sửa địa chỉ.
+    place_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "place-geocache.json")
+    known = json.load(open(place_path, encoding="utf-8")) if os.path.exists(place_path) else {}
+    out["places"] = [{"name": p, "lat": known[p]["lat"], "lng": known[p]["lng"]} for p in PLACES if p in known]
 
     json.dump(out, open(args.out, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
     n = sum(len(w["lessons"]) for w in weeks)

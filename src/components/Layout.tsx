@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { ArchiveRestore, Bell, CalendarOff, Calculator, CalendarRange, Database, GraduationCap, LayoutDashboard, Lock, ScanLine, School, Settings, ShieldAlert } from 'lucide-react'
+import { ArchiveRestore, Bell, CalendarOff, Calculator, CalendarRange, Database, GraduationCap, LayoutDashboard, Lock, ScanLine, School, Settings, ShieldAlert, WandSparkles } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { shortDate } from '../domain/time'
 import { useActiveWeek, useStore } from '../store'
@@ -7,11 +7,13 @@ import { ISSUE_META } from '../domain/issues'
 import { useWeekContext, useWeekIssues } from '../hooks'
 import { LeaveDialog, openLeaveDialog } from './LeaveDialog'
 import { LessonEditor } from './LessonEditor'
+import { TeacherProfileDialog } from './TeacherProfileDialog'
 import { Button, Toaster } from './ui'
 
 const NAV = [
   { to: '/', label: 'Bảng tổng quan', icon: LayoutDashboard, end: true },
   { to: '/alerts', label: 'Cảnh báo', icon: Bell },
+  { to: '/optimize', label: 'Tối ưu', icon: WandSparkles },
   { to: '/schools', label: 'Theo trường', icon: School },
   { to: '/teachers', label: 'Theo giáo viên', icon: GraduationCap },
   { to: '/costs', label: 'Chi phí di chuyển', icon: Calculator },
@@ -75,6 +77,7 @@ export function Layout() {
       </div>
       <LeaveDialog />
       <LessonEditor />
+      <TeacherProfileDialog />
       <Toaster />
     </div>
   )

@@ -48,6 +48,10 @@ Công thức km × đơn giá trong tài liệu dự án vẫn có sẵn ở C�
 - `src/pages`, `src/components`: giao diện.
 - `src/store.ts`: state và thao tác nghiệp vụ.
 
+## Tab Tối ưu
+
+`src/domain/optimize.ts` đề xuất chuyển hoặc đổi chéo toàn bộ ca của một giáo viên tại một trường, theo tuần hoặc theo ngày, vì chi phí tính theo chặng nên đổi ca lẻ hiếm khi tiết kiệm được. Mỗi đề xuất được thử trên toàn bộ lịch và không được phát sinh trùng lịch hay chặng không kịp, làm nguyện vọng xấu đi, làm một giáo viên thay đổi quá 6 ca/tuần hoặc mất hết ca.
+
 ## Giới hạn hiện tại
 
 - Google Sheet chỉ đọc (qua gviz CSV, Sheet phải chia sẻ theo liên kết). Ghi ngược cần OAuth hoặc backend.

@@ -9,6 +9,9 @@ import { DEFAULT_SETTINGS, needsTeacher, type Lesson, type Leave, type School, t
 import { cloneWeek } from './domain/weeks'
 import { applyDraft, applyBulk, newLesson, type BulkAction, type BulkScope, type LessonDraft } from './domain/lesson-edit'
 import { applyLeave, applyLessonLeave, revertLeave, revertLessonLeave } from './domain/leave'
+import { applySchoolAddress } from './domain/data-quality'
+import { applyChanges, type Change } from './domain/optimize'
+import { applyProfile, dropHomeKm, dropHomeLegs, type ProfileDraft } from './domain/teacher-profile'
 import { subjectCode, type OcrRow } from './domain/ocr-parse'
 import type { ParsedLesson, ParsedTeacher, PreferenceRow } from './domain/sheet-grid'
 
@@ -28,6 +31,10 @@ interface State extends World {
   deleteLesson: (id: string) => void
   applyBulkChange: (scope: BulkScope, action: BulkAction) => number
   undoLastEdit: () => void
+  applySuggestion: (changes: Change[]) => void
+  saveTeacherProfile: (id: string, draft: ProfileDraft) => void
+  saveSchoolAddress: (id: string, address: string) => void
+  setOfficeKm: (officeId: string, schoolId: string, km: number | null) => void
   addLeave: (teacherId: string, from: string, to: string, session: Session | 'ALL', note: string) => number
   addLessonLeave: (teacherId: string, lessonIds: string[], note: string) => number
   removeLeave: (id: string) => void
@@ -63,6 +70,8 @@ const initial = () => ({
 const normName = (s: string) => s.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
 const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 const OFFICE_OF = (v: string | null) => (v && /phú mỹ/i.test(v) ? 'PM' : 'BR')
+
+const DATA_VERSION = 4
 
 export const useStore = create<State>()(
   persist(
@@ -120,6 +129,34 @@ export const useStore = create<State>()(
           }
           return changed
         },
+        applySuggestion: (changes) => {
+          const weekId = get().activeWeekId
+          snapshot(weekId, 'Áp dụng đề xuất')
+          editWeek(weekId, (ls) => applyChanges(ls, changes))
+        },
+        saveTeacherProfile: (id, draft) => {
+          const old = get().teachers.find((t) => t.id === id)
+          if (!old) return
+          const next = applyProfile(old, draft, seed.places ?? [])
+          set((s) => ({ teachers: s.teachers.map((t) => (t.id === id ? next : t)) }))
+          if (next.address !== old.address) {
+            // Tuần đã lưu trữ giữ nguyên số đã chốt; tuần đang lập tính lại theo địa chỉ mới.
+            set((s) => ({
+              distances: dropHomeKm(s.distances, id),
+              weeks: s.weeks.map((w) => (w.status === 'planning' ? { ...w, legs: dropHomeLegs(w.legs, id) } : w)),
+            }))
+          }
+        },
+        saveSchoolAddress: (id, address) =>
+          set((s) => ({ schools: s.schools.map((x) => (x.id === id ? applySchoolAddress(x, address, seed.places ?? []) : x)) })),
+        setOfficeKm: (officeId, schoolId, km) =>
+          set((s) => {
+            const office = { ...s.distances.office }
+            const key = `${officeId}|${schoolId}`
+            if (km === null) delete office[key]
+            else office[key] = km
+            return { distances: { ...s.distances, office } }
+          }),
         undoLastEdit: () => {
           const last = get().lastEdit
           if (!last) return
@@ -332,31 +369,14 @@ export const useStore = create<State>()(
         },
 
         updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
-        resetAll: () => set(initial()),
+        resetAll: () => set({ ...initial(), lastEdit: null }),
       }
     },
     {
       name: 'gaia-scheduling',
-      version: 3,
-      // Bản lưu cũ: giữ lịch và các chỉnh sửa của điều phối, nạp thêm địa chỉ, toạ độ, khu vực mới.
-      migrate: (persisted) => {
-        const p = persisted as Partial<State>
-        const oldTeachers = new Map((p.teachers ?? []).map((t) => [t.id, t]))
-        const oldSchools = new Map((p.schools ?? []).map((x) => [x.id, x]))
-        return {
-          ...p,
-          offices: seed.offices,
-          distances: seed.distances,
-          teachers: seed.teachers.map((t) => {
-            const old = oldTeachers.get(t.id)
-            return old ? { ...t, gender: old.gender, maxKm: old.maxKm, preferences: old.preferences } : t
-          }),
-          schools: seed.schools.map((x) => {
-            const old = oldSchools.get(x.id)
-            return old ? { ...x, referredTeacherIds: old.referredTeacherIds, referSource: old.referSource, genderPreference: old.genderPreference, geo: old.geo?.source === 'manual' ? old.geo : x.geo } : x
-          }),
-        } as State
-      },
+      // Tăng số này khi muốn mọi trình duyệt bỏ dữ liệu đã sửa và nạp lại từ seed trong lần tải tiếp theo.
+      version: DATA_VERSION,
+      migrate: () => ({}) as State,
       storage: createJSONStorage(() => localStorage),
       partialize: ({ teachers, schools, offices, leaves, distances, weeks, settings, kmOverrides, activeWeekId, nextId, anonymized }) => ({ teachers, schools, offices, leaves, distances, weeks, settings, kmOverrides, activeWeekId, nextId, anonymized }),
       // Bản lưu từ seed khác (ẩn danh <-> dữ liệu thật) thì bỏ, tránh lẫn dữ liệu.

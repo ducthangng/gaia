@@ -12,6 +12,8 @@ input[type="checkbox"], input[type="radio"] { @apply accent-emerald-700; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 .tnum { font-variant-numeric: tabular-nums; }
+.no-spin::-webkit-inner-spin-button, .no-spin::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.no-spin { -moz-appearance: textfield; appearance: textfield; }
 
 @media print {
   body { background: white; font-size: 10px; }

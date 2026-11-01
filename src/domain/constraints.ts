@@ -14,6 +14,14 @@ export interface PrefViolation {
 // Khu vực có trong cột KHU VỰC (nơi GV mong muốn đi dạy); trường ở nơi khác (Hồ Tràm, Long Hải...) không so được.
 const KNOWN_AREAS = new Set(['PHÚ MỸ', 'CHÂU ĐỨC', 'BÀ RỊA', 'VŨNG TÀU', 'PHƯỚC HẢI'])
 
+/** Nghỉ theo buổi khoá cả buổi; nghỉ theo ca chỉ khoá đúng ca đó và các ca trùng giờ với nó. */
+export function leaveCovers(leave: Leave, l: Lesson) {
+  if (leave.lessonId === undefined) return leave.session === l.session
+  if (leave.lessonId === l.id) return true
+  const [a, b, s, e] = [toMin(leave.start), toMin(leave.end), toMin(l.start), toMin(l.end)]
+  return a !== null && b !== null && s !== null && e !== null && s < b && a < e
+}
+
 const appliesOn = (days: number[] | undefined, date: string) => !days?.length || days.includes(dayIndex(date))
 
 /** Nguyện vọng cá nhân: vi phạm được cảnh báo chứ không chặn cứng. */
@@ -58,7 +66,7 @@ export function blockers(
 ): Blocker[] {
   const out: Blocker[] = []
   if (t.onlineOnly) out.push({ kind: 'leave', note: 'Chỉ làm việc online' })
-  const leave = leaves.find((x) => x.teacherId === t.id && x.date === l.date && x.session === l.session)
+  const leave = leaves.find((x) => x.teacherId === t.id && x.date === l.date && leaveCovers(x, l))
   if (leave) out.push({ kind: 'leave', note: leave.note })
   const start = toMin(l.start)
   const end = toMin(l.end)

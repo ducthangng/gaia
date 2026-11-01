@@ -1,5 +1,5 @@
-import { AlertTriangle, FileDown, MapPin, Star, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, FileDown, MapPin, PanelLeftClose, PanelLeftOpen, Star, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useParams, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import { MovementPanel, type MovementSelection } from '../components/MovementPanel'
@@ -15,6 +15,7 @@ export function SchoolsPage() {
   const { id } = useParams()
   const ctx = useWeekContext()
   const [q, setQ] = useState('')
+  const [listOpen, setListOpen] = useState(true)
   const stats = useMemo(() => schoolLoad(ctx.week.lessons), [ctx.week.lessons])
   const issues = useWeekIssues(ctx)
   const list = ctx.world.schools
@@ -23,8 +24,8 @@ export function SchoolsPage() {
   const school = (id ? ctx.schoolById.get(id) : undefined) ?? list[0]
 
   return (
-    <div className="mx-auto grid h-full max-w-[1500px] grid-cols-[260px_minmax(0,1fr)] gap-4">
-      <Card className="flex min-h-0 flex-col self-stretch overflow-hidden">
+    <div className={clsx('mx-auto grid h-full max-w-[1700px] gap-4', listOpen ? 'grid-cols-[250px_minmax(0,1fr)]' : 'grid-cols-[minmax(0,1fr)]')}>
+      {listOpen && <Card className="flex min-h-0 flex-col self-stretch overflow-hidden">
         <div className="border-b border-slate-100 p-2"><input aria-label="Tìm trường" className="w-full" placeholder="Tìm trường…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <nav className="min-h-0 flex-1 overflow-y-auto p-1">
           {list.map((s) => (
@@ -34,13 +35,17 @@ export function SchoolsPage() {
             </NavLink>
           ))}
         </nav>
-      </Card>
-      {school ? <SchoolDetail key={school.id} school={school} ctx={ctx} issues={issues.filter((i) => touchesSchool(i, school.id))} /> : <Empty>Không có trường nào.</Empty>}
+      </Card>}
+      {school ? <SchoolDetail key={school.id} school={school} ctx={ctx} issues={issues.filter((i) => touchesSchool(i, school.id))} listToggle={
+        <Button variant="ghost" aria-label={listOpen ? 'Ẩn danh sách trường' : 'Hiện danh sách trường'} title={listOpen ? 'Ẩn danh sách trường để lịch rộng hơn' : 'Hiện danh sách trường'} onClick={() => setListOpen((x) => !x)}>
+          {listOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}{listOpen ? 'Ẩn danh sách' : 'Danh sách trường'}
+        </Button>
+      } /> : <Empty>Không có trường nào.</Empty>}
     </div>
   )
 }
 
-function SchoolDetail({ school: s, ctx, issues }: { school: School; ctx: Ctx; issues: Issue[] }) {
+function SchoolDetail({ school: s, ctx, issues, listToggle }: { school: School; ctx: Ctx; issues: Issue[]; listToggle: ReactNode }) {
   const [params] = useSearchParams()
   const [selection, setSelection] = useState<MovementSelection>(() => {
     const lesson = ctx.week.lessons.find((l) => l.id === params.get('lesson'))
@@ -66,6 +71,7 @@ function SchoolDetail({ school: s, ctx, issues }: { school: School; ctx: Ctx; is
           {s.programs.map((p) => <Badge key={p.program} tone="blue" title={[p.company, p.framework, p.startDate && `Khai giảng ${p.startDate}`].filter(Boolean).join(' · ')}>{p.program}</Badge>)}
         </span>}
         actions={<>
+          {listToggle}
           <Badge tone={cov.ratio < 1 ? 'red' : 'green'}>Độ phủ {cov.covered}/{cov.required}</Badge>
           <Button onClick={() => exportSchoolSchedule(ctx, s.id)}><FileDown size={14} />Excel</Button>
           <Button onClick={() => window.open(`/print/school/${s.id}`, '_blank')}><FileDown size={14} />PDF</Button>
@@ -81,12 +87,10 @@ function SchoolDetail({ school: s, ctx, issues }: { school: School; ctx: Ctx; is
         </div>
       )}
       <Card title="Lịch học trong tuần">
-        {lessons.length === 0 ? <Empty>Tuần này trường chưa có ca nào.</Empty> : (
-          <WeekTimeGrid lessons={lessons} ctx={ctx} issues={issues} onShowOnMap={(l) => {
-            setSelection({ teacherId: l.teacherId ?? '', lessonId: l.id })
-            scrollToMap()
-          }} />
-        )}
+        <WeekTimeGrid schoolId={s.id} lessons={lessons} ctx={ctx} issues={issues} onShowOnMap={(l) => {
+          setSelection({ teacherId: l.teacherId ?? '', lessonId: l.id })
+          scrollToMap()
+        }} />
       </Card>
       <div ref={panelRef} className="scroll-mt-2">
         <MovementPanel school={s} ctx={ctx} issues={issues} selection={selection} onSelect={setSelection} />

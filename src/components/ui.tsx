@@ -76,30 +76,38 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="px-4 py-8 text-center text-slate-500">{children}</div>
 }
 
+interface ToastAction {
+  label: string
+  run: () => void
+}
+
 interface ToastState {
   message: string | null
-  show: (m: string) => void
+  action: ToastAction | null
+  show: (m: string, action?: ToastAction) => void
   hide: () => void
 }
 
 const useToast = create<ToastState>((set) => ({
   message: null,
-  show: (message) => {
-    set({ message })
-    window.setTimeout(() => set((s) => (s.message === message ? { message: null } : s)), 5000)
+  action: null,
+  show: (message, action) => {
+    set({ message, action: action ?? null })
+    window.setTimeout(() => set((s) => (s.message === message ? { message: null, action: null } : s)), action ? 10000 : 5000)
   },
-  hide: () => set({ message: null }),
+  hide: () => set({ message: null, action: null }),
 }))
 
-export const toast = (m: string) => useToast.getState().show(m)
+export const toast = (m: string, action?: ToastAction) => useToast.getState().show(m, action)
 
 export function Toaster() {
-  const { message, hide } = useToast()
+  const { message, action, hide } = useToast()
   if (!message) return null
   return (
     <div role="status" className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-white shadow-lg">
       <CheckCircle2 size={15} className="text-emerald-400" />
       {message}
+      {action && <button className="ml-2 font-semibold text-emerald-300 underline hover:text-emerald-200" onClick={() => { action.run(); hide() }}>{action.label}</button>}
       <button aria-label="Đóng" onClick={hide} className="ml-2 text-slate-400 hover:text-white">
         <X size={14} />
       </button>

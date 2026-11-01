@@ -7,7 +7,7 @@ import { LessonChip } from '../components/LessonChip'
 import { Badge, Button, Card, Empty, PageHeader, Stat } from '../components/ui'
 import { byTime, routeForWeek, tally, type RouteLeg } from '../domain/route'
 import { DAY_LABELS, dayLabel, money, SESSION_LABEL, weekDates } from '../domain/time'
-import { teacherLabel, type Gender, type Preference, type Session, type Teacher } from '../domain/types'
+import { teacherLabel, type Gender, type Leave, type Preference, type Session, type Teacher } from '../domain/types'
 import { useWeekContext, weekCosts, type Ctx } from '../hooks'
 import { exportTeacherSchedule } from '../services/exports'
 import { useStore } from '../store'
@@ -90,14 +90,14 @@ function TeacherDetail({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
                     <ArrowRight size={13} className="text-slate-400" />
                     <span className="inline-flex items-center gap-1 text-slate-500" title="Chặng về nhà: tính vào tổng lộ trình, biểu giá theo bậc không trả tiền chặng này"><Home size={12} />{r.returnKm} km</span>
                   </>}
-                  {dayLeaves.map((x) => <Badge key={x.id} tone="red"><CalendarOff size={10} />{SESSION_LABEL[x.session]}: {x.note}</Badge>)}
+                  {dayLeaves.map((x) => <Badge key={x.id} tone="red"><CalendarOff size={10} />{leaveWhen(x)}: {x.note}</Badge>)}
                   <span className="ml-auto flex items-center gap-3">
                     {ctx.week.status === 'planning' && day.length > 0 && <Button variant="ghost" className="!py-0.5 text-xs" onClick={() => openLeaveDialog({ teacherId: t.id, date: d })}><CalendarOff size={12} />Xin nghỉ ngày này</Button>}
                     <span className="tnum font-semibold">{money(r.cost)}</span>
                   </span>
                 </div>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(145px,1fr))] gap-1.5">
-                  {day.map((l) => <LessonChip key={l.id} lesson={l} ctx={ctx} show="school" />)}
+                  {day.map((l) => <LessonChip key={l.id} lesson={l} ctx={ctx} show="school" detailsOnly />)}
                 </div>
               </div>
             )
@@ -112,6 +112,9 @@ function TeacherDetail({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
     </div>
   )
 }
+
+/** Nghỉ theo ca ghi rõ giờ và lớp, nghỉ theo buổi ghi buổi. */
+const leaveWhen = (l: Leave) => (l.lessonId ? `Ca ${l.start ?? ''}${l.label ? ` lớp ${l.label}` : ''}` : SESSION_LABEL[l.session])
 
 function LegView({ leg, date, teacherId, ctx }: { leg: RouteLeg; date: string; teacherId: string; ctx: Ctx }) {
   const setKm = useStore((s) => s.setKmOverride)
@@ -209,7 +212,7 @@ function LeaveCard({ teacher: t, ctx }: { teacher: Teacher; ctx: Ctx }) {
       <ul className="max-h-56 space-y-1 overflow-y-auto p-4">
         {mine.map((l) => (
           <li key={l.id} className="flex items-center justify-between rounded bg-slate-50 px-2 py-1">
-            <span>{dayLabel(l.date)} · {SESSION_LABEL[l.session]} · {l.note}</span>
+            <span>{dayLabel(l.date)} · {leaveWhen(l)} · {l.note}</span>
             <button aria-label="Huỷ ngày nghỉ" title="Huỷ nghỉ: các ca chưa có người thay sẽ trả về giáo viên này" className="text-slate-400 hover:text-red-600" onClick={() => removeLeave(l.id)}><Trash2 size={13} /></button>
           </li>
         ))}

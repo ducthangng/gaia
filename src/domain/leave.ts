@@ -30,3 +30,17 @@ export const revertLeave = (lessons: Lesson[], r: LeaveRange): Lesson[] =>
       ? { ...l, teacherId: r.teacherId, originalTeacherId: null, status: 'assigned' }
       : l,
   )
+
+const afterLeave = (l: Lesson, teacherId: string): Lesson => ({ ...l, teacherId: null, originalTeacherId: teacherId, status: isTeaching(l) ? 'needs_cover' : 'cancelled' })
+
+/** Nghỉ theo ca: chỉ các ca được chọn chuyển đi, những ca khác trong ngày giữ nguyên. */
+export const applyLessonLeave = (lessons: Lesson[], teacherId: string, ids: string[]): Lesson[] =>
+  lessons.map((l) => (ids.includes(l.id) && l.teacherId === teacherId && l.status === 'assigned' ? afterLeave(l, teacherId) : l))
+
+/** Huỷ nghỉ theo ca: trả đúng ca đó về GV nếu chưa có ai nhận thay. */
+export const revertLessonLeave = (lessons: Lesson[], teacherId: string, id: string): Lesson[] =>
+  lessons.map((l) =>
+    l.id === id && l.originalTeacherId === teacherId && !l.teacherId && (l.status === 'needs_cover' || l.status === 'cancelled')
+      ? { ...l, teacherId, originalTeacherId: null, status: 'assigned' }
+      : l,
+  )

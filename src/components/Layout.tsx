@@ -6,6 +6,7 @@ import { useActiveWeek, useStore } from '../store'
 import { ISSUE_META } from '../domain/issues'
 import { useWeekContext, useWeekIssues } from '../hooks'
 import { LeaveDialog, openLeaveDialog } from './LeaveDialog'
+import { LessonEditor } from './LessonEditor'
 import { Button, Toaster } from './ui'
 
 const NAV = [
@@ -73,6 +74,7 @@ export function Layout() {
         </main>
       </div>
       <LeaveDialog />
+      <LessonEditor />
       <Toaster />
     </div>
   )

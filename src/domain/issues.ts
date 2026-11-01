@@ -94,3 +94,11 @@ export function issueScore(issues: Issue[]) {
   const n = (s: Severity) => issues.filter((i) => ISSUE_META[i.kind].severity === s).length
   return { urgent: n('critical') + n('warning'), rank: n('critical') * 1e6 + n('warning') * 1e3 + n('info') }
 }
+
+const issueKey = (i: Issue) => `${i.kind}|${i.lesson.id}|${i.related?.id ?? ''}`
+
+/** Cảnh báo sẽ phát sinh thêm sau một thay đổi: dùng để báo trước khi người dùng bấm lưu. */
+export function newIssues(before: Issue[], after: Issue[]): Issue[] {
+  const known = new Set(before.map(issueKey))
+  return after.filter((i) => !known.has(issueKey(i)))
+}

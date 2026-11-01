@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import seedJson from '../data/seed.json'
-import { preferenceViolations, blockers } from './constraints'
+import { blockers, leaveCovers, preferenceViolations } from './constraints'
 import { buildContext, type World } from './context'
 import { googleDirectionsUrl, haversineKm, isPrecise, parseLatLng, roadKm, wardOf } from './geo'
 import { movementTo } from './movement'
-import { hourRange, layoutDay } from './timetable'
-import { healthOf, issueScore, schoolLoad, touchesSchool, weekIssues } from './issues'
-import { affectedByLeave, applyLeave, revertLeave } from './leave'
+import { axisHeight, axisY, buildAxis, hourRange, layoutDay, prettyName } from './timetable'
+import { applyBulk, applyDraft, draftErrors, draftFrom, inScope, newLesson, type BulkScope } from './lesson-edit'
+import { healthOf, issueScore, newIssues, schoolLoad, touchesSchool, weekIssues } from './issues'
+import { affectedByLeave, applyLeave, applyLessonLeave, revertLeave, revertLessonLeave } from './leave'
 import { DEFAULT_SETTINGS, teacherLabel, type GeoPoint, type Lesson, type Seed, type Teacher } from './types'
 
 const seed = seedJson as unknown as Seed
@@ -239,5 +240,156 @@ describe('hiển thị giáo viên', () => {
   it('có cả mã và tên, bản ẩn danh không lặp mã', () => {
     expect(teacherLabel({ id: 'VT011', name: 'Trần Lan Hương' })).toBe('VT011 · Trần Lan Hương')
     expect(teacherLabel({ id: 'VT011', name: 'Giáo viên VT011' })).toBe('Giáo viên VT011')
+  })
+})
+
+describe('sửa một ca', () => {
+  const d = (over = {}) => ({ ...draftFrom(lesson({})), ...over })
+  it('bắt lỗi giờ và thiếu tên lớp', () => {
+    expect(draftErrors(d())).toEqual([])
+    expect(draftErrors(d({ start: '', end: '' }))).toHaveLength(1)
+    expect(draftErrors(d({ start: '09:00', end: '08:00' }))).toEqual(['Giờ kết thúc phải sau giờ bắt đầu'])
+    expect(draftErrors(d({ className: '', note: '' }))).toEqual(['Cần có tên lớp hoặc ghi chú'])
+    expect(draftErrors(d({ className: '', note: 'Họp với trường' }))).toEqual([])
+  })
+  it('đổi giờ sang chiều thì đổi buổi; đổi môn thì đổi mã quy đổi', () => {
+    const x = applyDraft(lesson({}), d({ start: '14:00', end: '14:35', subject: 'KNS' }))
+    expect(x).toMatchObject({ session: 'PM', subject: 'KNS', code: 'K' })
+  })
+  it('ca hỗ trợ giữ nguyên mã khi đổi môn', () => {
+    expect(applyDraft(lesson({ code: 'CM' }), d({ subject: 'KNS' })).code).toBe('CM')
+  })
+  it('bỏ giáo viên thành cần GV; thêm giáo viên thành đã xếp', () => {
+    expect(applyDraft(lesson({}), d({ teacherId: '' }))).toMatchObject({ teacherId: null, status: 'needs_cover' })
+    expect(applyDraft(lesson({ teacherId: null, status: 'needs_cover' }), d({ teacherId: 'U' }))).toMatchObject({ teacherId: 'U', status: 'assigned' })
+  })
+  it('có GV gốc thì người mới là dạy thay; trả về GV gốc là ca thường', () => {
+    const open = lesson({ teacherId: null, originalTeacherId: 'A', status: 'needs_cover' })
+    expect(applyDraft(open, d({ teacherId: 'B' }))).toMatchObject({ type: 'substitute', originalTeacherId: 'A' })
+    expect(applyDraft({ ...open, teacherId: 'B', type: 'substitute', status: 'assigned' }, d({ teacherId: 'A' }))).toMatchObject({ type: 'regular', originalTeacherId: null })
+  })
+  it('sửa giờ không làm sống lại ca trường đã báo nghỉ', () => {
+    expect(applyDraft(lesson({ status: 'school_off' }), d({ start: '09:00', end: '09:35' })).status).toBe('school_off')
+  })
+  it('ca mới có mã quy đổi theo môn và chưa có GV thì cần GV', () => {
+    const x = newLesson('n', 'w', 's', d({ teacherId: '', subject: 'STEM' }))
+    expect(x).toMatchObject({ code: 'S', status: 'needs_cover', schoolId: 's' })
+    expect(newLesson('n', 'w', 's', d({ teacherId: 'T', subject: 'CDS' }))).toMatchObject({ code: 'C', status: 'assigned', teacherId: 'T' })
+  })
+})
+
+describe('đổi lịch hàng loạt', () => {
+  const ls = [
+    lesson({ id: 'a', schoolId: 's', date: '2026-11-02' }),
+    lesson({ id: 'b', schoolId: 's', date: '2026-11-02', session: 'PM', start: '14:00', end: '14:35', teacherId: 'U' }),
+    lesson({ id: 'c', schoolId: 's', date: '2026-11-03' }),
+    lesson({ id: 'x', schoolId: 'khac', date: '2026-11-02' }),
+    lesson({ id: 'r', schoolId: 's', date: '2026-11-02', status: 'replaced' }),
+  ]
+  const scope = (over: Partial<BulkScope> = {}): BulkScope => ({ schoolId: 's', date: '2026-11-02', session: 'ALL', teacherId: '', ...over })
+  const changed = (next: typeof ls) => next.filter((l, i) => l !== ls[i]).map((l) => l.id)
+  it('phạm vi lọc đúng trường, ngày, buổi, giáo viên', () => {
+    expect(ls.filter((l) => inScope(l, scope())).map((l) => l.id)).toEqual(['a', 'b'])
+    expect(ls.filter((l) => inScope(l, scope({ session: 'PM' }))).map((l) => l.id)).toEqual(['b'])
+    expect(ls.filter((l) => inScope(l, scope({ date: '' }))).map((l) => l.id)).toEqual(['a', 'b', 'c'])
+    expect(ls.filter((l) => inScope(l, scope({ date: '', teacherId: 'U' }))).map((l) => l.id)).toEqual(['b'])
+  })
+  it('trường nghỉ cả ngày rồi khôi phục', () => {
+    const off = applyBulk(ls, scope(), { kind: 'school_off' })
+    expect(changed(off)).toEqual(['a', 'b'])
+    const back = applyBulk(off, scope(), { kind: 'restore' })
+    expect(back.find((l) => l.id === 'a')!.status).toBe('assigned')
+  })
+  it('dời sang ngày khác và lùi giờ, tự đổi buổi', () => {
+    expect(applyBulk(ls, scope(), { kind: 'move', toDate: '2026-11-04' }).find((l) => l.id === 'a')!.date).toBe('2026-11-04')
+    const later = applyBulk(ls, scope({ session: 'AM' }), { kind: 'shift', minutes: 300 }).find((l) => l.id === 'a')!
+    expect(later).toMatchObject({ start: '12:30', end: '13:05', session: 'PM' })
+    expect(applyBulk(ls, scope({ session: 'AM' }), { kind: 'shift', minutes: -30 }).find((l) => l.id === 'a')!.start).toBe('07:00')
+  })
+  it('đổi giáo viên cho các ca của một người; bỏ trống thành cần GV', () => {
+    const next = applyBulk(ls, scope({ date: '', teacherId: 'T' }), { kind: 'teacher', toTeacherId: 'V' })
+    expect(changed(next)).toEqual(['a', 'c'])
+    expect(next.find((l) => l.id === 'b')!.teacherId).toBe('U')
+    expect(applyBulk(ls, scope({ teacherId: 'U' }), { kind: 'teacher', toTeacherId: '' }).find((l) => l.id === 'b')).toMatchObject({ teacherId: null, status: 'needs_cover' })
+  })
+  it('ca đã đúng thì không tính là thay đổi', () => {
+    expect(changed(applyBulk(ls, scope(), { kind: 'move', toDate: '2026-11-02' }))).toEqual([])
+  })
+})
+
+describe('báo trước cảnh báo phát sinh', () => {
+  const [a] = seed.schools.filter((s) => s.geo)
+  const w = (lessons: Lesson[]) => weekIssues(buildContext({ ...week, lessons, legs: [] }, { ...world, teachers: [...world.teachers, teacher()] }))
+  it('chỉ liệt kê cảnh báo mới do thay đổi gây ra', () => {
+    const base = [lesson({ id: '1', schoolId: a.id }), lesson({ id: '2', schoolId: a.id, start: '09:00', end: '09:35', className: '1B' })]
+    const moved = [base[0], { ...base[1], start: '07:40', end: '08:15' }]
+    const fresh = newIssues(w(base), w(moved))
+    expect(fresh.map((i) => i.kind)).toEqual(['overlap'])
+    expect(newIssues(w(base), w(base))).toEqual([])
+  })
+})
+
+describe('trục giờ thu gọn', () => {
+  const am = { startMin: 7 * 60 + 15, endMin: 7 * 60 + 55 }
+  const pm = { startMin: 14 * 60, endMin: 14 * 60 + 35 }
+  it('khoảng trống dài thu thành dải, khoảng ngắn giữ nguyên', () => {
+    expect(buildAxis([am, pm]).map((s) => s.kind)).toEqual(['slots', 'gap', 'slots'])
+    expect(buildAxis([am, { startMin: 8 * 60, endMin: 8 * 60 + 40 }]).map((s) => s.kind)).toEqual(['slots'])
+  })
+  it('toạ độ tăng dần và ca chiều không bị đẩy xa', () => {
+    const axis = buildAxis([am, pm])
+    const y1 = axisY(axis, am.startMin, 26, 24)
+    const y2 = axisY(axis, am.endMin, 26, 24)
+    const y3 = axisY(axis, pm.startMin, 26, 24)
+    expect(y1).toBe(0)
+    expect(y2).toBeGreaterThan(y1)
+    expect(y3).toBe(axisHeight(axis.slice(0, 2), 26, 24))
+    expect(axisHeight(axis, 26, 24)).toBeLessThan(26 * 12)
+  })
+  it('ca ngắn được giữ đủ chỗ đọc, không đè lên ca kế tiếp', () => {
+    const r = layoutDay([lesson({ id: 'a', start: '08:00', end: '08:15' }), lesson({ id: 'b', start: '08:20', end: '08:55' })])
+    expect(r.lanes).toBe(2)
+  })
+  it('viết tên dễ đọc', () => {
+    expect(prettyName('TRẦN LAN HƯƠNG')).toBe('Trần Lan Hương')
+    expect(prettyName('ĐINH THANH NGÀ')).toBe('Đinh Thanh Ngà')
+  })
+})
+
+describe('xin nghỉ theo ca', () => {
+  const a = lesson({ id: 'a', start: '07:30', end: '08:05' })
+  const b = lesson({ id: 'b', start: '08:10', end: '08:45', className: '1B' })
+  const hotro = lesson({ id: 'h', start: '09:00', end: '09:35', code: 'CM', className: null })
+  it('chỉ ca được chọn chuyển đi, ca khác trong buổi giữ nguyên', () => {
+    const next = applyLessonLeave([a, b, hotro], 'T', ['a', 'h'])
+    expect(next[0]).toMatchObject({ teacherId: null, originalTeacherId: 'T', status: 'needs_cover' })
+    expect(next[1]).toBe(b)
+    expect(next[2].status).toBe('cancelled')
+  })
+  it('không đụng ca của giáo viên khác', () => {
+    const other = lesson({ id: 'o', teacherId: 'U' })
+    expect(applyLessonLeave([other], 'T', ['o'])[0]).toBe(other)
+  })
+  it('huỷ nghỉ trả đúng ca đó về, ca đã có người thay thì giữ', () => {
+    const left = applyLessonLeave([a, b], 'T', ['a', 'b'])
+    const back = revertLessonLeave(left, 'T', 'a')
+    expect(back[0]).toMatchObject({ teacherId: 'T', status: 'assigned', originalTeacherId: null })
+    expect(back[1].status).toBe('needs_cover')
+    const covered = { ...left[0], teacherId: 'U', status: 'assigned' as const }
+    expect(revertLessonLeave([covered], 'T', 'a')[0].teacherId).toBe('U')
+  })
+  const leave = { id: 'l', teacherId: 'T', date: a.date, session: 'AM' as const, kind: 'leave' as const, note: 'Nghỉ', lessonId: 'a', start: '07:30', end: '08:05' }
+  it('nghỉ theo ca chỉ khoá đúng khung giờ, ca khác cùng buổi vẫn nhận được', () => {
+    expect(leaveCovers(leave, a)).toBe(true)
+    expect(leaveCovers(leave, b)).toBe(false)
+    expect(leaveCovers(leave, lesson({ id: 'x', start: '07:45', end: '08:20' }))).toBe(true)
+    const ctx = buildContext(week, world)
+    expect(blockers(teacher(), b, [], [leave], ctx.book, DEFAULT_SETTINGS)).toEqual([])
+    expect(blockers(teacher(), a, [], [leave], ctx.book, DEFAULT_SETTINGS).map((x) => x.kind)).toEqual(['leave'])
+  })
+  it('nghỉ theo buổi vẫn khoá cả buổi', () => {
+    const whole = { ...leave, lessonId: undefined, start: undefined, end: undefined }
+    expect(leaveCovers(whole, b)).toBe(true)
+    expect(leaveCovers(whole, lesson({ session: 'PM', start: '14:00', end: '14:35' }))).toBe(false)
   })
 })

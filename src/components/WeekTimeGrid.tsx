@@ -1,15 +1,20 @@
 import clsx from 'clsx'
-import { useMemo, useState } from 'react'
+import { CalendarClock, Plus } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ISSUE_META, type Issue } from '../domain/issues'
-import { hourRange, layoutDay } from '../domain/timetable'
-import { DAY_LABELS, dayLabel, shortDate, weekDates } from '../domain/time'
+import { axisHeight, axisY, buildAxis, layoutDay, MIN_VISUAL_MIN } from '../domain/timetable'
+import { DAY_LABELS, dayIndex, dayLabel, shortDate, weekDates } from '../domain/time'
 import type { Lesson } from '../domain/types'
 import type { Ctx } from '../hooks'
 import { LessonChip } from './LessonChip'
+import { openLessonEditor } from './LessonEditor'
+import { Button } from './ui'
 
-const ROW_PX = 18 // Một ô 15 phút
-const LANE_MIN_PX = 106
-const EMPTY_DAY_PX = 76
+const ROW_PX = 29 // Một ô 15 phút: ca 35 phút cao khoảng 67px, đủ 4 dòng chữ
+const GAP_PX = 24
+const LANE_MIN_PX = 142
+const EMPTY_DAY_PX = 70
+const TIME_COL_PX = 52
 
 const LEGEND: { swatch: string; label: string }[] = [
   { swatch: 'bg-amber-50 border-amber-200', label: 'STEM' },
@@ -24,54 +29,85 @@ const LEGEND: { swatch: string; label: string }[] = [
   { swatch: 'bg-white ring-2 ring-amber-500 border-transparent', label: 'Không kịp di chuyển' },
 ]
 
-/** Lịch dạng lưới giờ: mỗi ca đặt đúng vị trí theo giờ, ca trùng giờ nằm cạnh nhau trong cùng một ngày. */
-export function WeekTimeGrid({ lessons, ctx, issues, onShowOnMap }: { lessons: Lesson[]; ctx: Ctx; issues: Issue[]; onShowOnMap: (l: Lesson) => void }) {
+const label = (min: number) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+
+/**
+ * Lịch dạng lưới giờ. Trường đông ca không thể hiện đủ chữ cả tuần trong một khung,
+ * nên mặc định xem từng ngày nếu cả tuần không vừa; vẫn chuyển sang "Cả tuần" được (cuộn ngang).
+ */
+export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap }: { schoolId: string; lessons: Lesson[]; ctx: Ctx; issues: Issue[]; onShowOnMap: (l: Lesson) => void }) {
   const allDates = weekDates(ctx.week.startDate)
-  const [onlyDay, setOnlyDay] = useState<string | null>(null)
-  const dates = onlyDay ? [onlyDay] : allDates
+  const withLessons = allDates.filter((d) => lessons.some((l) => l.date === d))
+  const weekDays = allDates.filter((d) => dayIndex(d) < 5 || withLessons.includes(d))
+  const [choice, setChoice] = useState<string | 'week' | null>(null)
+  const box = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(0)
+  useEffect(() => {
+    const observer = new ResizeObserver(([e]) => setWidth(e.contentRect.width))
+    observer.observe(box.current!)
+    return () => observer.disconnect()
+  }, [])
+
+  const lanesOn = (d: string) => layoutDay(lessons.filter((l) => l.date === d)).lanes
+  const weekWidth = TIME_COL_PX + weekDays.reduce((w, d) => w + (lanesOn(d) ? lanesOn(d) * LANE_MIN_PX : EMPTY_DAY_PX), 0)
+  const weekFits = width === 0 || weekWidth <= width
+  // Chưa chọn: tuần vừa khung thì xem cả tuần, không thì xem ngày đầu tiên có ca.
+  const view = choice ?? (weekFits || !withLessons.length ? 'week' : withLessons[0])
+  const dates = view === 'week' ? weekDays : [view]
+
   const days = useMemo(() => dates.map((d) => ({ date: d, ...layoutDay(lessons.filter((l) => l.date === d)) })), [dates.join(), lessons]) // eslint-disable-line react-hooks/exhaustive-deps
-  const countOn = (d: string) => lessons.filter((l) => l.date === d).length
-  const { from, to } = useMemo(() => hourRange(lessons), [lessons])
+  const axis = useMemo(() => buildAxis(days.flatMap((d) => d.placed)), [days])
   const marks = useMemo(() => {
     const m = new Map<string, 'critical' | 'warning'>()
     for (const i of issues) {
       const sev = ISSUE_META[i.kind].severity
       if (sev === 'info') continue
-      for (const id of [i.lesson.id, i.related?.id]) {
-        if (id && !(m.get(id) === 'critical')) m.set(id, sev)
-      }
+      for (const id of [i.lesson.id, i.related?.id]) if (id && m.get(id) !== 'critical') m.set(id, sev)
     }
     return m
   }, [issues])
-  const rows = (to - from) * 4
-  const height = rows * ROW_PX
+  const countOn = (d: string) => lessons.filter((l) => l.date === d).length
+  const height = axisHeight(axis, ROW_PX, GAP_PX)
   const hasUntimed = days.some((d) => d.untimed.length > 0)
-  const columns = `56px ${days.map((d) => (d.lanes ? `minmax(${d.lanes * LANE_MIN_PX}px, ${d.lanes}fr)` : `minmax(${EMPTY_DAY_PX}px, 0.6fr)`)).join(' ')}`
-  // Sọc xen kẽ mỗi 15 phút giúp dóng giờ từ cột trái sang.
-  const stripes = `repeating-linear-gradient(to bottom, #fff 0 ${ROW_PX}px, #f4f6ec ${ROW_PX}px ${ROW_PX * 2}px)`
+  const columns = `${TIME_COL_PX}px ${days.map((d) => (d.lanes ? `minmax(${d.lanes * LANE_MIN_PX}px, ${d.lanes}fr)` : `minmax(${EMPTY_DAY_PX}px, 0.6fr)`)).join(' ')}`
+  const overflowing = view === 'week' && !weekFits
+  const pill = (active: boolean) => clsx('tnum rounded-full border px-2.5 py-0.5 text-xs font-medium', active ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100')
 
   return (
-    <div>
+    <div ref={box}>
       <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-4 py-2" role="group" aria-label="Chọn ngày xem">
-        <button aria-pressed={!onlyDay} onClick={() => setOnlyDay(null)} className={clsx('rounded-full border px-2.5 py-0.5 text-xs font-medium', !onlyDay ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100')}>Cả tuần</button>
-        {allDates.map((d, i) => countOn(d) > 0 && (
-          <button key={d} aria-pressed={onlyDay === d} onClick={() => setOnlyDay(d)} className={clsx('tnum rounded-full border px-2.5 py-0.5 text-xs font-medium', onlyDay === d ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100')}>
-            {DAY_LABELS[i]} {shortDate(d)} <span className="opacity-70">· {countOn(d)} ca</span>
+        {withLessons.map((d) => (
+          <button key={d} aria-pressed={view === d} onClick={() => setChoice(d)} className={pill(view === d)}>
+            {DAY_LABELS[dayIndex(d)]} {shortDate(d)} <span className="opacity-70">· {countOn(d)} ca</span>
           </button>
         ))}
+        <button aria-pressed={view === 'week'} onClick={() => setChoice('week')} className={pill(view === 'week')}>Cả tuần</button>
+        {overflowing && <span className="text-xs text-slate-500" data-testid="scroll-hint">Cuộn ngang để xem hết các ngày</span>}
+        <span className="ml-auto flex items-center gap-1.5">
+          {ctx.week.status === 'planning' ? <>
+            <Button className="!py-1 text-xs" onClick={() => openLessonEditor({ newForSchool: schoolId, date: view === 'week' ? undefined : view })}><Plus size={13} />Thêm ca</Button>
+            <Button className="!py-1 text-xs" onClick={() => openLessonEditor({ bulkForSchool: schoolId, date: view === 'week' ? undefined : view })}><CalendarClock size={13} />Đổi lịch hàng loạt</Button>
+          </> : <span className="text-xs text-slate-500">Tuần đã lưu trữ, chỉ xem</span>}
+        </span>
       </div>
-      <div className="max-h-[72vh] overflow-auto" data-testid="time-grid">
-        <div className="grid min-w-max" style={{ gridTemplateColumns: columns }}>
-          <div className="sticky left-0 top-0 z-30 border-b border-r border-slate-200 bg-slate-100 px-1 py-1.5 text-center text-xs font-semibold text-slate-600">Giờ</div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-100 px-4 py-1.5 text-xs text-slate-600" data-testid="grid-legend">
+        <span className="font-medium text-slate-500">Chú thích:</span>
+        {LEGEND.map((x) => (
+          <span key={x.label} className="inline-flex items-center gap-1.5"><span className={clsx('inline-block h-3 w-4 rounded-sm border', x.swatch)} />{x.label}</span>
+        ))}
+      </div>
+      <div className="max-h-[78vh] overflow-auto" data-testid="time-grid">
+        <div className="grid" style={{ gridTemplateColumns: columns, minWidth: 'max-content', width: '100%' }}>
+          <div className="sticky left-0 top-0 z-30 border-b border-r border-slate-200 bg-slate-100 py-1.5 text-center text-xs font-semibold text-slate-600">Giờ</div>
           {days.map((d) => (
             <div key={d.date} className="sticky top-0 z-20 border-b border-r border-slate-200 bg-slate-100 px-1 py-1.5 text-center text-xs font-semibold text-slate-700">{dayLabel(d.date)}</div>
           ))}
           {hasUntimed && <>
             <div className="sticky left-0 z-10 border-b border-r border-slate-200 bg-white px-1 py-1 text-center text-[11px] leading-tight text-slate-500">Chưa rõ giờ</div>
             {days.map((d) => (
-              <div key={d.date} className="flex flex-wrap content-start gap-1 border-b border-r border-slate-200 bg-white p-1" data-testid="untimed-cell">
+              <div key={d.date} className="grid content-start gap-1 border-b border-r border-slate-200 bg-white p-1" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${LANE_MIN_PX - 8}px, 1fr))` }} data-testid="untimed-cell">
                 {d.untimed.map((l) => (
-                  <div key={l.id} className="h-12 min-w-0 flex-1 basis-24">
+                  <div key={l.id} className="min-h-[68px]" data-testid="lesson-slot">
                     <LessonChip lesson={l} ctx={ctx} show="teacher" fill mark={marks.get(l.id)} onShowOnMap={onShowOnMap} />
                   </div>
                 ))}
@@ -79,19 +115,28 @@ export function WeekTimeGrid({ lessons, ctx, issues, onShowOnMap }: { lessons: L
             ))}
           </>}
           <div className="sticky left-0 z-10 border-r border-slate-200 bg-white" style={{ height }}>
-            {Array.from({ length: rows }, (_, i) => {
-              const min = from * 60 + i * 15
-              const label = `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
-              return <div key={i} className={clsx('tnum flex items-center justify-center text-[10px]', i % 4 === 0 ? 'font-bold text-slate-800' : 'text-slate-400')} style={{ height: ROW_PX, background: i % 2 ? '#f4f6ec' : '#fff' }}>{label}</div>
-            })}
+            {axis.map((seg) => seg.kind === 'gap' ? (
+              <div key={seg.from} className="tnum flex items-center justify-center bg-slate-200 text-[10px] text-slate-500" style={{ height: GAP_PX }} title={`${label(seg.from)}–${label(seg.to)}: không có ca`}>⋮</div>
+            ) : Array.from({ length: (seg.to - seg.from) / 15 }, (_, i) => {
+              const min = seg.from + i * 15
+              return <div key={min} className={clsx('tnum flex items-center justify-center text-[10px]', min % 60 === 0 ? 'font-bold text-slate-800' : 'text-slate-400')} style={{ height: ROW_PX, background: (min / 15) % 2 ? '#f4f6ec' : '#fff' }}>{label(min)}</div>
+            }))}
           </div>
           {days.map((d) => (
-            <div key={d.date} className="relative border-r border-slate-200" style={{ height, background: stripes }} data-testid="day-column">
+            <div key={d.date} className="relative border-r border-slate-200" style={{ height }} data-testid="day-column">
+              <div aria-hidden className="absolute inset-0">
+                {axis.map((seg) => seg.kind === 'gap' ? (
+                  <div key={seg.from} className="tnum flex items-center justify-center bg-slate-200 text-[10px] text-slate-500" style={{ height: GAP_PX }}>{label(seg.from)}–{label(seg.to)} không có ca</div>
+                ) : Array.from({ length: (seg.to - seg.from) / 15 }, (_, i) => {
+                  const min = seg.from + i * 15
+                  return <div key={min} style={{ height: ROW_PX, background: (min / 15) % 2 ? '#f4f6ec' : '#fff' }} />
+                }))}
+              </div>
               {d.placed.map((p) => {
-                const top = ((p.startMin - from * 60) / 15) * ROW_PX
-                const h = ((p.endMin - p.startMin) / 15) * ROW_PX
+                const top = axisY(axis, p.startMin, ROW_PX, GAP_PX)
+                const bottom = axisY(axis, Math.max(p.endMin, p.startMin + MIN_VISUAL_MIN), ROW_PX, GAP_PX)
                 return (
-                  <div key={p.lesson.id} className="absolute p-px hover:z-10" style={{ top, height: Math.max(h, ROW_PX * 2), left: `${(p.lane / d.lanes) * 100}%`, width: `${100 / d.lanes}%` }}>
+                  <div key={p.lesson.id} data-testid="lesson-slot" className="absolute p-px hover:z-10" style={{ top, height: bottom - top, left: `${(p.lane / d.lanes) * 100}%`, width: `${100 / d.lanes}%` }}>
                     <LessonChip lesson={p.lesson} ctx={ctx} show="teacher" fill mark={marks.get(p.lesson.id)} onShowOnMap={onShowOnMap} />
                   </div>
                 )
@@ -99,12 +144,6 @@ export function WeekTimeGrid({ lessons, ctx, issues, onShowOnMap }: { lessons: L
             </div>
           ))}
         </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-slate-100 px-4 py-2 text-xs text-slate-600" data-testid="grid-legend">
-        <span className="font-medium text-slate-500">Chú thích:</span>
-        {LEGEND.map((x) => (
-          <span key={x.label} className="inline-flex items-center gap-1.5"><span className={clsx('inline-block h-3.5 w-5 rounded-sm border', x.swatch)} />{x.label}</span>
-        ))}
       </div>
     </div>
   )

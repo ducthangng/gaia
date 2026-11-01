@@ -18,6 +18,10 @@ export interface DayLayout {
   untimed: Lesson[]
 }
 
+/** Tên viết hoa toàn bộ chiếm nhiều chỗ và khó đọc trong ô nhỏ. */
+export const prettyName = (name: string) =>
+  name.toLocaleLowerCase('vi').replace(/(^|\s)(\p{L})/gu, (_, sp: string, ch: string) => sp + ch.toLocaleUpperCase('vi'))
+
 /** Xếp ca vào các làn: ca trùng giờ nằm cạnh nhau, ca nối tiếp dùng chung làn. */
 export function layoutDay(lessons: Lesson[]): DayLayout {
   const timed = lessons
@@ -32,7 +36,7 @@ export function layoutDay(lessons: Lesson[]): DayLayout {
   const placed = timed.map((t) => {
     let lane = laneEnds.findIndex((end) => end <= t.startMin)
     if (lane === -1) lane = laneEnds.length
-    laneEnds[lane] = t.endMin
+    laneEnds[lane] = Math.max(t.endMin, t.startMin + MIN_VISUAL_MIN)
     return { ...t, lane }
   })
   return { placed, lanes: laneEnds.length, untimed: lessons.filter((l) => toMin(l.start) === null) }
@@ -50,3 +54,53 @@ export function hourRange(lessons: Lesson[]): { from: number; to: number } {
   }
   return { from, to }
 }
+
+/** Ca ngắn vẫn cần đủ chỗ để đọc: khi xếp làn và vẽ, coi như dài tối thiểu từng này phút. */
+export const MIN_VISUAL_MIN = 35
+
+export type AxisSegment =
+  | { kind: 'slots'; from: number; to: number }
+  | { kind: 'gap'; from: number; to: number }
+
+const GAP_COLLAPSE_MIN = 60
+
+/**
+ * Trục giờ: khoảng trống từ 1 tiếng trở lên (ví dụ giờ nghỉ trưa) thu lại thành một dải,
+ * để buổi sáng và buổi chiều cùng nằm trong một màn hình.
+ */
+export function buildAxis(placed: { startMin: number; endMin: number }[]): AxisSegment[] {
+  if (!placed.length) return [{ kind: 'slots', from: 7 * 60, to: 17 * 60 }]
+  const spans = placed
+    .map((p) => ({ from: Math.floor(p.startMin / 15) * 15, to: Math.ceil(Math.max(p.endMin, p.startMin + MIN_VISUAL_MIN) / 15) * 15 }))
+    .sort((a, b) => a.from - b.from)
+  const merged: { from: number; to: number }[] = []
+  for (const s of spans) {
+    const last = merged.at(-1)
+    if (last && s.from - last.to < GAP_COLLAPSE_MIN) last.to = Math.max(last.to, s.to)
+    else merged.push({ ...s })
+  }
+  const out: AxisSegment[] = []
+  merged.forEach((m, i) => {
+    if (i > 0) out.push({ kind: 'gap', from: merged[i - 1].to, to: m.from })
+    out.push({ kind: 'slots', ...m })
+  })
+  return out
+}
+
+/** Quy đổi phút trong ngày thành toạ độ dọc theo trục đã thu gọn. */
+export function axisY(axis: AxisSegment[], minute: number, rowPx: number, gapPx: number): number {
+  let y = 0
+  for (const seg of axis) {
+    if (seg.kind === 'gap') {
+      if (minute < seg.to) return y
+      y += gapPx
+    } else {
+      if (minute <= seg.to) return y + (Math.max(minute - seg.from, 0) / 15) * rowPx
+      y += ((seg.to - seg.from) / 15) * rowPx
+    }
+  }
+  return y
+}
+
+export const axisHeight = (axis: AxisSegment[], rowPx: number, gapPx: number) =>
+  axis.reduce((h, seg) => h + (seg.kind === 'gap' ? gapPx : ((seg.to - seg.from) / 15) * rowPx), 0)

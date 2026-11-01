@@ -7,7 +7,8 @@ import { kmKey, routeForWeek } from './domain/route'
 import { addDays, weekDates } from './domain/time'
 import { DEFAULT_SETTINGS, needsTeacher, type Lesson, type Leave, type School, type Session, type Settings, type Teacher, type Week } from './domain/types'
 import { cloneWeek } from './domain/weeks'
-import { applyLeave, revertLeave } from './domain/leave'
+import { applyDraft, applyBulk, newLesson, type BulkAction, type BulkScope, type LessonDraft } from './domain/lesson-edit'
+import { applyLeave, applyLessonLeave, revertLeave, revertLessonLeave } from './domain/leave'
 import { subjectCode, type OcrRow } from './domain/ocr-parse'
 import type { ParsedLesson, ParsedTeacher, PreferenceRow } from './domain/sheet-grid'
 
@@ -21,7 +22,14 @@ interface State extends World {
   requestCover: (lessonId: string) => void
   markSchoolOff: (lessonId: string, off: boolean) => void
   autoFill: () => { filled: number; left: number }
+  lastEdit: { weekId: string; lessons: Lesson[]; label: string } | null
+  saveLesson: (id: string, draft: LessonDraft) => void
+  addLesson: (schoolId: string, draft: LessonDraft) => void
+  deleteLesson: (id: string) => void
+  applyBulkChange: (scope: BulkScope, action: BulkAction) => number
+  undoLastEdit: () => void
   addLeave: (teacherId: string, from: string, to: string, session: Session | 'ALL', note: string) => number
+  addLessonLeave: (teacherId: string, lessonIds: string[], note: string) => number
   removeLeave: (id: string) => void
   updateTeacher: (id: string, patch: Partial<Teacher>) => void
   updateSchool: (id: string, patch: Partial<School>) => void
@@ -71,9 +79,53 @@ export const useStore = create<State>()(
         set({ nextId: n + 1 })
         return `${prefix}${n}`
       }
+      /** Giữ lịch trước khi sửa để có thể hoàn tác một bước. */
+      const snapshot = (weekId: string, label: string) => {
+        const week = get().weeks.find((w) => w.id === weekId)
+        if (week) set({ lastEdit: { weekId, lessons: week.lessons, label } })
+      }
+      const weekOf = (id: string) => get().weeks.find((w) => w.lessons.some((l) => l.id === id))
       return {
         ...initial(),
+        lastEdit: null,
         setActiveWeek: (id) => set({ activeWeekId: id }),
+
+        saveLesson: (id, draft) => {
+          const week = weekOf(id)
+          if (!week) return
+          snapshot(week.id, 'Sửa ca')
+          editWeek(week.id, (ls) => ls.map((l) => (l.id === id ? applyDraft(l, draft) : l)))
+        },
+        addLesson: (schoolId, draft) => {
+          const weekId = get().activeWeekId
+          snapshot(weekId, 'Thêm ca')
+          const lesson = newLesson(newId('e'), weekId, schoolId, draft)
+          editWeek(weekId, (ls) => [...ls, lesson])
+        },
+        deleteLesson: (id) => {
+          const week = weekOf(id)
+          if (!week) return
+          snapshot(week.id, 'Xoá ca')
+          editWeek(week.id, (ls) => ls.filter((l) => l.id !== id))
+        },
+        applyBulkChange: (scope, action) => {
+          const weekId = get().activeWeekId
+          const week = get().weeks.find((w) => w.id === weekId)
+          if (!week) return 0
+          const next = applyBulk(week.lessons, scope, action)
+          const changed = next.filter((l, i) => l !== week.lessons[i]).length
+          if (changed) {
+            snapshot(weekId, 'Đổi lịch hàng loạt')
+            editWeek(weekId, () => next)
+          }
+          return changed
+        },
+        undoLastEdit: () => {
+          const last = get().lastEdit
+          if (!last) return
+          editWeek(last.weekId, () => last.lessons)
+          set({ lastEdit: null })
+        },
 
         assign: (lessonId, teacherId) =>
           editLesson(lessonId, (l) => ({
@@ -114,7 +166,7 @@ export const useStore = create<State>()(
           const existing = get().leaves
           for (let d = from; d <= to; d = addDays(d, 1)) {
             for (const sess of sessions) {
-              if (!existing.some((x) => x.teacherId === teacherId && x.date === d && x.session === sess)) {
+              if (!existing.some((x) => x.teacherId === teacherId && x.date === d && x.session === sess && x.lessonId === undefined)) {
                 add.push({ id: newId('lv-new-'), teacherId, date: d, session: sess, kind: 'leave', note: note || 'Nghỉ phép' })
               }
             }
@@ -132,10 +184,24 @@ export const useStore = create<State>()(
           return flagged
         },
 
+        addLessonLeave: (teacherId, lessonIds, note) => {
+          const picked = get().weeks.filter((w) => w.status === 'planning').flatMap((w) => w.lessons).filter((l) => lessonIds.includes(l.id) && l.teacherId === teacherId && l.status === 'assigned')
+          const add: Leave[] = picked.map((l) => ({
+            id: newId('lv-new-'), teacherId, date: l.date, session: l.session, kind: 'leave', note: note || 'Nghỉ phép', lessonId: l.id, start: l.start ?? undefined, end: l.end ?? undefined, label: l.className ?? l.note ?? undefined,
+          }))
+          set((s) => ({ leaves: [...s.leaves, ...add] }))
+          for (const w of get().weeks.filter((x) => x.status === 'planning')) editWeek(w.id, (ls) => applyLessonLeave(ls, teacherId, lessonIds))
+          return picked.length
+        },
+
         removeLeave: (id) => {
           const leave = get().leaves.find((l) => l.id === id)
           if (!leave) return
           set((s) => ({ leaves: s.leaves.filter((l) => l.id !== id) }))
+          if (leave.lessonId) {
+            for (const w of get().weeks.filter((x) => x.status === 'planning')) editWeek(w.id, (ls) => revertLessonLeave(ls, leave.teacherId, leave.lessonId!))
+            return
+          }
           const range = { teacherId: leave.teacherId, from: leave.date, to: leave.date, sessions: [leave.session] }
           for (const w of get().weeks.filter((x) => x.status === 'planning')) editWeek(w.id, (ls) => revertLeave(ls, range))
         },

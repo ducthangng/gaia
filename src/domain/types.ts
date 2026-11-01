@@ -109,6 +109,11 @@ export interface Leave {
   session: Session
   kind: 'leave' | 'online'
   note: string
+  /** Nghỉ theo ca: chỉ khoá đúng khung giờ của ca này, GV vẫn nhận được ca khác trong buổi. */
+  lessonId?: string
+  start?: string
+  end?: string
+  label?: string
 }
 
 export interface Office {

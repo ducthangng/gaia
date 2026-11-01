@@ -1,11 +1,14 @@
 import { autoUpdate, flip, FloatingPortal, offset, shift, size, useClick, useDismiss, useFloating, useInteractions } from '@floating-ui/react'
 import clsx from 'clsx'
-import { AlertTriangle, Ban, CalendarOff, Check, MapPinned, Search, Star, UserMinus } from 'lucide-react'
+import { AlertTriangle, Ban, CalendarOff, CalendarX, Check, MapPinned, Pencil, Search, Star, UserMinus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { blockerLabel } from '../domain/constraints'
 import { rankCandidates, type Candidate } from '../domain/recommend'
 import { dayLabel, money, SESSION_LABEL } from '../domain/time'
-import { teacherLabel, type Lesson } from '../domain/types'
+import { prettyName } from '../domain/timetable'
+import { teacherLabel, type Lesson, type Teacher } from '../domain/types'
+import { openLeaveDialog } from './LeaveDialog'
+import { openLessonEditor } from './LessonEditor'
 import type { Ctx } from '../hooks'
 import { useStore } from '../store'
 import { Badge, Button, toast } from './ui'
@@ -17,9 +20,34 @@ export const subjectStyle = (subject: string | null) => {
   return 'bg-teal-50 border-teal-200'
 }
 
+/** Ô trên lưới giờ: không cắt chữ, tên dài thì xuống dòng. */
+function GridLessonBody({ lesson: l, teacher, uncovered, statusText }: { lesson: Lesson; teacher: Teacher | null | undefined; uncovered: boolean; statusText: string | null }) {
+  const named = teacher && !teacher.name.includes(teacher.id)
+  const typeLabel = TYPE_LABEL[l.type]
+  return (
+    <>
+      <div className="flex items-baseline justify-between gap-1">
+        <span className="tnum whitespace-nowrap text-[11px] text-slate-500">{l.start ?? `Tiết ${l.period}`}{l.end && `–${l.end}`}</span>
+        {l.subject && <span className="text-[10px] font-medium text-slate-600">{l.subject}</span>}
+      </div>
+      <div className="flex items-baseline justify-between gap-1">
+        <span className={clsx('min-w-0 font-semibold', statusText && 'line-through')}>{l.className ?? l.note ?? typeLabel ?? '—'}{l.className && typeLabel && !statusText && !uncovered ? <span className="ml-1 font-normal text-slate-500">· {typeLabel}</span> : null}</span>
+        {named && !uncovered && !statusText && <span className="tnum shrink-0 text-[11px] font-medium text-slate-500">{teacher.id}</span>}
+      </div>
+      {uncovered ? (
+        <div className="flex items-center gap-1 font-medium text-red-700"><AlertTriangle size={11} className="shrink-0" />Cần giáo viên</div>
+      ) : statusText ? (
+        <div className="text-slate-600">{statusText}</div>
+      ) : (
+        <div className="text-slate-700">{teacher ? (named ? prettyName(teacher.name) : teacher.name) : l.teacherId}</div>
+      )}
+    </>
+  )
+}
+
 const TYPE_LABEL: Partial<Record<Lesson['type'], string>> = { substitute: 'Dạy thay', makeup: 'Dạy bù', support: 'Hỗ trợ', event: 'Chuyên đề', observe: 'Dự giờ' }
 
-export function LessonChip({ lesson: l, ctx, show, fill, mark, onShowOnMap }: {
+export function LessonChip({ lesson: l, ctx, show, fill, mark, onShowOnMap, detailsOnly }: {
   lesson: Lesson
   ctx: Ctx
   show: 'teacher' | 'school'
@@ -27,6 +55,8 @@ export function LessonChip({ lesson: l, ctx, show, fill, mark, onShowOnMap }: {
   fill?: boolean
   mark?: 'critical' | 'warning'
   onShowOnMap?: (l: Lesson) => void
+  /** Chỉ xem chi tiết ca: không gợi ý giáo viên, không có thao tác. */
+  detailsOnly?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const { refs, floatingStyles, context } = useFloating({
@@ -51,9 +81,10 @@ export function LessonChip({ lesson: l, ctx, show, fill, mark, onShowOnMap }: {
       <button
         ref={refs.setReference}
         {...getReferenceProps()}
+        title={fill ? [`${l.start ?? `Tiết ${l.period}`}${l.end ? `–${l.end}` : ''}`, l.className ?? l.note, l.subject, teacher ? teacherLabel(teacher) : 'Chưa có giáo viên', l.note && l.className ? l.note : null].filter(Boolean).join(' · ') : undefined}
         className={clsx(
           'block w-full rounded border text-left leading-tight transition hover:ring-2 hover:ring-emerald-500/40',
-          fill ? '@container relative h-full overflow-hidden px-1 py-0.5 text-[11px] hover:z-10' : 'px-1.5 py-1',
+          fill ? 'relative h-full overflow-hidden px-1.5 py-0.5 text-xs hover:z-10' : 'px-1.5 py-1',
           mark === 'critical' && 'ring-2 ring-red-500',
           mark === 'warning' && 'ring-2 ring-amber-500',
           l.type === 'substitute' && !uncovered && 'border-l-4 border-l-slate-700',
@@ -62,22 +93,28 @@ export function LessonChip({ lesson: l, ctx, show, fill, mark, onShowOnMap }: {
           open && 'ring-2 ring-emerald-600',
         )}
       >
-        <div className="flex items-center justify-between gap-1">
-          <span className="tnum shrink-0 whitespace-nowrap text-[11px] text-slate-500">{l.start ?? `Tiết ${l.period}`}{fill && l.end && <span className="hidden @[135px]:inline">–{l.end}</span>}</span>
-          <span className="truncate text-[11px] text-slate-500">{l.subject}</span>
-        </div>
-        <div className={clsx('truncate font-medium', (off || replaced || cancelled) && 'line-through')}>{l.className ?? l.note ?? '—'}</div>
-        <div className={clsx('truncate', fill ? 'text-[11px]' : 'text-xs', uncovered ? 'font-medium text-red-700' : 'text-slate-600')}>
-          {uncovered ? (
-            <span className="inline-flex items-center gap-1"><AlertTriangle size={11} />Cần giáo viên</span>
-          ) : off ? 'Trường báo nghỉ' : replaced ? 'GV nghỉ, đã có người thay' : cancelled ? 'Huỷ do GV nghỉ' : show === 'teacher' ? (teacher ? teacherLabel(teacher) : l.teacherId) : school?.fullName}
-        </div>
-        {!fill && typeLabel && !off && !replaced && !cancelled && !uncovered && <div className="truncate text-[11px] text-slate-500">{typeLabel}</div>}
+        {fill ? (
+          <GridLessonBody lesson={l} teacher={teacher} uncovered={uncovered} statusText={off ? 'Trường báo nghỉ' : replaced ? 'GV nghỉ, đã có người thay' : cancelled ? 'Huỷ do GV nghỉ' : null} />
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-1">
+              <span className="tnum shrink-0 whitespace-nowrap text-[11px] text-slate-500">{l.start ?? `Tiết ${l.period}`}</span>
+              <span className="truncate text-[11px] text-slate-500">{l.subject}</span>
+            </div>
+            <div className={clsx('truncate font-medium', (off || replaced || cancelled) && 'line-through')}>{l.className ?? l.note ?? '—'}</div>
+            <div className={clsx('truncate text-xs', uncovered ? 'font-medium text-red-700' : 'text-slate-600')}>
+              {uncovered ? (
+                <span className="inline-flex items-center gap-1"><AlertTriangle size={11} />Cần giáo viên</span>
+              ) : off ? 'Trường báo nghỉ' : replaced ? 'GV nghỉ, đã có người thay' : cancelled ? 'Huỷ do GV nghỉ' : show === 'teacher' ? (teacher ? teacherLabel(teacher) : l.teacherId) : school?.fullName}
+            </div>
+            {typeLabel && !off && !replaced && !cancelled && !uncovered && <div className="truncate text-[11px] text-slate-500">{typeLabel}</div>}
+          </>
+        )}
       </button>
       {open && (
         <FloatingPortal>
           <div ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()} className="z-40 flex w-[460px] max-w-[95vw] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
-            <AssignPanel lesson={l} ctx={ctx} close={() => setOpen(false)} onShowOnMap={onShowOnMap} />
+            <AssignPanel lesson={l} ctx={ctx} close={() => setOpen(false)} onShowOnMap={onShowOnMap} detailsOnly={detailsOnly} />
           </div>
         </FloatingPortal>
       )}
@@ -85,13 +122,14 @@ export function LessonChip({ lesson: l, ctx, show, fill, mark, onShowOnMap }: {
   )
 }
 
-function AssignPanel({ lesson: l, ctx, close, onShowOnMap }: { lesson: Lesson; ctx: Ctx; close: () => void; onShowOnMap?: (l: Lesson) => void }) {
+function AssignPanel({ lesson: l, ctx, close, onShowOnMap, detailsOnly }: { lesson: Lesson; ctx: Ctx; close: () => void; onShowOnMap?: (l: Lesson) => void; detailsOnly?: boolean }) {
   const assign = useStore((s) => s.assign)
   const requestCover = useStore((s) => s.requestCover)
   const markSchoolOff = useStore((s) => s.markSchoolOff)
   const [query, setQuery] = useState('')
   const [onlyFree, setOnlyFree] = useState(true)
-  const readOnly = ctx.week.status === 'archived'
+  const archived = ctx.week.status === 'archived'
+  const readOnly = archived || !!detailsOnly
   const candidates = useMemo(() => (readOnly ? [] : rankCandidates(l, ctx)), [l, ctx, readOnly])
   const q = query.trim().toLowerCase()
   const shown = candidates.filter((c) => (!onlyFree || c.available) && (!q || c.teacher.name.toLowerCase().includes(q) || c.teacher.id.toLowerCase().includes(q)))
@@ -116,7 +154,9 @@ function AssignPanel({ lesson: l, ctx, close, onShowOnMap }: { lesson: Lesson; c
           <Button className="mt-2 !py-1 text-xs" onClick={() => { onShowOnMap(l); close() }}><MapPinned size={13} />Xem đường đi trên bản đồ</Button>
         )}
         {!readOnly && (
-          <div className="mt-2 flex gap-1.5">
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <Button className="!py-1 text-xs" onClick={() => { openLessonEditor({ lessonId: l.id }); close() }}><Pencil size={13} />Sửa ca</Button>
+            {l.status === 'assigned' && l.teacherId && <Button className="!py-1 text-xs" onClick={() => { openLeaveDialog({ teacherId: l.teacherId!, date: l.date, lessonId: l.id }); close() }}><CalendarX size={13} />Xin nghỉ ca này</Button>}
             {l.status === 'assigned' && <Button className="!py-1 text-xs" onClick={() => { requestCover(l.id); toast('Đã chuyển ca sang cần dạy thay') }}><UserMinus size={13} />Cần dạy thay</Button>}
             {l.status !== 'school_off' ? (
               <Button className="!py-1 text-xs" onClick={() => { markSchoolOff(l.id, true); close() }}><CalendarOff size={13} />Trường báo nghỉ</Button>
@@ -126,7 +166,7 @@ function AssignPanel({ lesson: l, ctx, close, onShowOnMap }: { lesson: Lesson; c
           </div>
         )}
       </div>
-      {readOnly ? (
+      {detailsOnly ? null : readOnly ? (
         <div className="px-3 py-3 text-xs text-slate-500">Tuần đã lưu trữ: chỉ xem. Mở lại tuần ở màn hình Lịch tuần nếu cần chỉnh sửa.</div>
       ) : (
         <>

@@ -15,6 +15,7 @@ import { applyChanges, type Change } from './domain/optimize'
 import { applyProfile, dropHomeKm, dropHomeLegs, type ProfileDraft } from './domain/teacher-profile'
 import { subjectCode, type OcrRow } from './domain/ocr-parse'
 import type { ParsedLesson, ParsedTeacher, PreferenceRow } from './domain/sheet-grid'
+import { API_MODE } from './sync/api'
 
 interface State extends World {
   weeks: Week[]
@@ -94,10 +95,11 @@ export const useStore = create<State>()(
         const week = get().weeks.find((w) => w.lessons.some((l) => l.id === id))
         if (week) editWeek(week.id, (ls) => ls.map((l) => (l.id === id ? fn(l) : l)))
       }
+      // Nhiều người cùng sửa trên server: id phải duy nhất giữa các máy, không chỉ trong một trình duyệt.
       const newId = (prefix: string) => {
         const n = get().nextId
         set({ nextId: n + 1 })
-        return `${prefix}${n}`
+        return API_MODE ? `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` : `${prefix}${n}`
       }
       /** Giữ lịch trước khi sửa để có thể hoàn tác một bước. */
       const snapshot = (weekId: string, label: string) => {
@@ -430,10 +432,12 @@ export const useStore = create<State>()(
       }
     },
     {
-      name: 'gaia-scheduling',
+      // Có server: dữ liệu lấy từ API, trình duyệt chỉ nhớ tuần đang xem.
+      name: API_MODE ? 'gaia-ui' : 'gaia-scheduling',
       // Tăng số này khi muốn mọi trình duyệt bỏ dữ liệu đã sửa và nạp lại từ seed trong lần tải tiếp theo.
       version: DATA_VERSION,
       migrate: (persisted, version) => {
+        if (API_MODE) return persisted as State
         if (version < OLDEST_KEPT_VERSION) return {} as State
         // v5: thêm trường đến cho các chặng đã ghi, không đụng tới chỉnh sửa của người dùng.
         const p = persisted as State
@@ -448,10 +452,11 @@ export const useStore = create<State>()(
         }
       },
       storage: createJSONStorage(() => localStorage),
-      partialize: ({ teachers, schools, offices, leaves, distances, weeks, settings, kmOverrides, activeWeekId, nextId, anonymized }) => ({ teachers, schools, offices, leaves, distances, weeks, settings, kmOverrides, activeWeekId, nextId, anonymized }),
+      partialize: API_MODE ? ({ activeWeekId }) => ({ activeWeekId }) as Partial<State> : ({ teachers, schools, offices, leaves, distances, weeks, settings, kmOverrides, activeWeekId, nextId, anonymized }) => ({ teachers, schools, offices, leaves, distances, weeks, settings, kmOverrides, activeWeekId, nextId, anonymized }),
       // Bản lưu từ seed khác (ẩn danh <-> dữ liệu thật) thì bỏ, tránh lẫn dữ liệu.
       merge: (persisted, current) => {
         const p = persisted as Partial<State> | undefined
+        if (API_MODE) return p?.activeWeekId ? { ...current, activeWeekId: p.activeWeekId } : current
         return p && p.anonymized === seed.meta.anonymized ? { ...current, ...p } : current
       },
     },

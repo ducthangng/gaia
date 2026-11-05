@@ -1,6 +1,6 @@
-import { AlertTriangle, FileDown, MapPin, PanelLeftClose, PanelLeftOpen, Plus, Star, X } from 'lucide-react'
+import { AlertTriangle, FileDown, MapPin, Maximize2, PanelLeftClose, PanelLeftOpen, Plus, Star, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { NavLink, useParams, useSearchParams } from 'react-router-dom'
+import { Link, NavLink, useParams, useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import { EntityAnchor } from '../components/EntityLink'
 import { SchoolsTable } from '../components/InfoTables'
@@ -100,7 +100,11 @@ function SchoolDetail({ school: s, ctx, issues, listToggle }: { school: School; 
           </div>
         </div>
       )}
-      <Card title="Lịch học trong tuần">
+      <Card title="Lịch học trong tuần" actions={
+        <Link to={`/schedule/${s.id}`} data-testid="open-schedule" className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-50" title="Mở lịch chiếm cả màn hình, không có thanh bên và bản đồ">
+          <Maximize2 size={13} />Xem toàn trang
+        </Link>
+      }>
         <WeekTimeGrid schoolId={s.id} lessons={lessons} ctx={ctx} issues={issues} onShowOnMap={(l) => {
           setSelection({ teacherId: l.teacherId ?? '', lessonId: l.id })
           scrollToMap()

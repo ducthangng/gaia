@@ -12,6 +12,8 @@ import { openResetDialog, ResetDataDialog } from './ResetDataDialog'
 import { NewSchoolDialog } from './NewSchoolDialog'
 import { TeacherProfileDialog } from './TeacherProfileDialog'
 import { Button, Toaster } from './ui'
+import { SyncStatus } from './SyncStatus'
+import { API_MODE } from '../sync/api'
 
 const NAV = [
   { to: '/', label: 'Bảng tổng quan', icon: LayoutDashboard, end: true },
@@ -50,9 +52,10 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
-        <button onClick={openResetDialog} data-testid="reset-data" className="mx-3 mb-2 flex items-center gap-3 rounded-md px-3 py-2 text-left font-medium text-slate-600 hover:bg-slate-100">
+        {/* Có server thì không còn "dữ liệu gốc" ở trình duyệt để quay về: bỏ nút này, hiện trạng thái lưu. */}
+        {API_MODE ? <SyncStatus /> : <button onClick={openResetDialog} data-testid="reset-data" className="mx-3 mb-2 flex items-center gap-3 rounded-md px-3 py-2 text-left font-medium text-slate-600 hover:bg-slate-100">
           <RotateCcw size={15} />Về dữ liệu mới nhất
-        </button>
+        </button>}
         {anonymized && (
           <div className="m-3 flex gap-2 rounded-md bg-slate-100 p-3 text-xs leading-relaxed text-slate-600">
             <ShieldAlert size={14} className="mt-0.5 shrink-0" />

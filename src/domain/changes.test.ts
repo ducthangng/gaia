@@ -700,12 +700,13 @@ describe('so dữ liệu hiện tại với bản mới nhất', () => {
   })
   it('liệt kê đúng từng loại thay đổi', () => {
     const w = seed.weeks.at(-1)!
+    const nextMonday = new Date(Date.parse(`${w.startDate}T00:00:00Z`) + 7 * 86400_000).toISOString().slice(0, 10)
     const changed = {
       ...base,
       teachers: [...seed.teachers.map((t) => (t.id === 'VT001' ? { ...t, phone: '0901234567' } : t)), teacher({ id: 'VT999', isNew: true })],
       schools: seed.schools.slice(1),
       leaves: seed.leaves.slice(2),
-      weeks: [...seed.weeks.map((x) => (x.id === w.id ? { ...x, lessons: x.lessons.map((l, i) => (i < 3 ? { ...l, teacherId: 'VT001' } : l)).slice(1) } : x)), { ...w, id: '2026-11-09' }],
+      weeks: [...seed.weeks.map((x) => (x.id === w.id ? { ...x, lessons: x.lessons.map((l, i) => (i < 3 ? { ...l, teacherId: 'VT001' } : l)).slice(1) } : x)), { ...w, id: nextMonday }],
       kmOverrides: { a: 1 },
       settings: { ...DEFAULT_SETTINGS, ratePerKm: 1 },
     }
@@ -756,7 +757,7 @@ describe('gợi ý xếp ca trống của trường', () => {
   })
   const costOfWeek = (w: typeof week, ctx: ReturnType<typeof buildContext>) => world.teachers.reduce((s, t) => s + weekDatesOf(w.startDate).reduce((x, d) => x + routeForWeek(w, t, d, ctx).cost, 0), 0)
   const owner = week.lessons.find((l) => l.schoolId === schoolId && l.status === 'assigned' && l.code === 'S')!.teacherId!
-  const tue = (l: Lesson) => l.date === '2026-11-03'
+  const tue = (l: Lesson) => l.date === weekDatesOf(week.startDate)[1]
   const w = vacate(owner, tue)
   const ctx = buildContext(w, world)
   const opts = coverOptions(schoolId, ctx)

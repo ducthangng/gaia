@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { CalendarClock, Plus } from 'lucide-react'
+import { CalendarClock, Info, Plus } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ISSUE_META, type Issue } from '../domain/issues'
 import { axisHeight, axisY, buildAxis, isMorning, layoutDay, MIN_VISUAL_MIN, sessionBands } from '../domain/timetable'
@@ -41,14 +41,15 @@ const LEGEND: { swatch: string; label: string }[] = [
 const label = (min: number) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
 
 /**
- * Lịch dạng lưới giờ. Trường đông ca không thể hiện đủ chữ cả tuần trong một khung,
+ * Lịch dạng lưới giờ. `fullPage`: lưới chiếm hết chiều cao khung chứa, chú thích gập lại cho rộng chỗ. Trường đông ca không thể hiện đủ chữ cả tuần trong một khung,
  * nên mặc định xem từng ngày nếu cả tuần không vừa; vẫn chuyển sang "Cả tuần" được (cuộn ngang).
  */
-export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap }: { schoolId: string; lessons: Lesson[]; ctx: Ctx; issues: Issue[]; onShowOnMap: (l: Lesson) => void }) {
+export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap, fullPage = false }: { schoolId: string; lessons: Lesson[]; ctx: Ctx; issues: Issue[]; onShowOnMap?: (l: Lesson) => void; fullPage?: boolean }) {
   const allDates = weekDates(ctx.week.startDate)
   const withLessons = allDates.filter((d) => lessons.some((l) => l.date === d))
   const weekDays = allDates.filter((d) => dayIndex(d) < 5 || withLessons.includes(d))
   const [choice, setChoice] = useState<string | 'week' | null>(null)
+  const [legendOpen, setLegendOpen] = useState(!fullPage)
   const box = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
   useEffect(() => {
@@ -84,7 +85,7 @@ export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap }: { 
   const pill = (active: boolean) => clsx('tnum rounded-full border px-2.5 py-0.5 text-xs font-medium', active ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100')
 
   return (
-    <div ref={box}>
+    <div ref={box} className={clsx(fullPage && 'flex h-full min-h-0 flex-col')}>
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3" role="group" aria-label="Chọn ngày xem">
         {withLessons.map((d) => (
           <button key={d} aria-pressed={view === d} onClick={() => setChoice(d)} className={pill(view === d)}>
@@ -94,19 +95,20 @@ export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap }: { 
         <button aria-pressed={view === 'week'} onClick={() => setChoice('week')} className={pill(view === 'week')}>Cả tuần</button>
         {overflowing && <span className="text-xs text-slate-500" data-testid="scroll-hint">Cuộn ngang để xem hết các ngày</span>}
         <span className="ml-auto flex items-center gap-1.5">
+          {fullPage && <Button className="!py-1 text-xs" aria-pressed={legendOpen} onClick={() => setLegendOpen((x) => !x)}><Info size={13} />Chú thích</Button>}
           {ctx.week.status === 'planning' ? <>
             <Button className="!py-1 text-xs" onClick={() => openLessonEditor({ newForSchool: schoolId, date: view === 'week' ? undefined : view })}><Plus size={13} />Thêm ca</Button>
             <Button className="!py-1 text-xs" onClick={() => openLessonEditor({ bulkForSchool: schoolId, date: view === 'week' ? undefined : view })}><CalendarClock size={13} />Đổi lịch hàng loạt</Button>
           </> : <span className="text-xs text-slate-500">Tuần đã lưu trữ, chỉ xem</span>}
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-slate-100 px-5 py-3 text-xs text-slate-600" data-testid="grid-legend">
+      {legendOpen && <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-slate-100 px-5 py-3 text-xs text-slate-600" data-testid="grid-legend">
         <span className="font-medium text-slate-500">Chú thích:</span>
         {LEGEND.map((x) => (
           <span key={x.label} className="inline-flex items-center gap-1.5"><span className={clsx('inline-block h-3 w-4 rounded-sm border', x.swatch)} />{x.label}</span>
         ))}
-      </div>
-      <div className="max-h-[78vh] overflow-auto" data-testid="time-grid">
+      </div>}
+      <div className={clsx('overflow-auto', fullPage ? 'min-h-0 flex-1' : 'max-h-[78vh]')} data-testid="time-grid">
         <div className="grid" style={{ gridTemplateColumns: columns, minWidth: 'max-content', width: '100%' }}>
           <div className="sticky left-0 top-0 z-30 border-b border-r border-slate-200 bg-slate-100 py-2.5 text-center text-xs font-semibold text-slate-600">Giờ</div>
           {days.map((d) => (

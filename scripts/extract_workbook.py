@@ -50,6 +50,9 @@ SCHOOL_ALIASES = {
     "Tiểu học Phước Hưng – Long Điền": "TH Phước Hưng - Long Điền",
     "TH Phước Hải  - Phước Hải": "TH Phước Hải - Phước Hải",
     "TH PHƯỚC BỬU": "TH Phước Bửu - Hồ Tràm",
+    # Lịch từ Tháng 11 - Tuần 1 ghi theo khu vực Phú Mỹ; data.xlsx ghi Bà Rịa kèm Plus Code (Tân Hải, Chu Hải).
+    "TH Trần Quốc Toản - Phú Mỹ CS1": "TH Trần Quốc Toản CS1 - Bà Rịa",
+    "TH Trần Quốc Toản - Phú Mỹ CS2": "TH Trần Quốc Toản CS2 ( TH Chu Hải ) - Bà Rịa",
 }
 
 

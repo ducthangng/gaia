@@ -20,7 +20,7 @@ python3 scripts/extract_workbook.py "<lịch>.xlsx" src/data/seed.json --data da
 - `seed.local.json`: có SĐT và địa chỉ nhà của giáo viên. Chỉ nạp khi chạy `dev`, không commit, không deploy.
 - `seed.json`: dữ liệu của mọi bản build. Có tên giáo viên; không có SĐT, địa chỉ nhà, vị trí nhà, ghi chú và người phụ trách. File này được commit, nên tên giáo viên sẽ công khai nếu repo công khai.
 
-Chỉnh sửa trên giao diện được lưu ở `localStorage` của trình duyệt cho tới khi có backend.
+Không đặt `VITE_API_URL`: chỉnh sửa lưu ở `localStorage` của trình duyệt (bản demo). Đặt `VITE_API_URL=/api`: dữ liệu, đăng nhập và lịch sử sửa đổi nằm trên backend, xem [server/README.md](server/README.md).
 
 ### Toạ độ và bản đồ
 

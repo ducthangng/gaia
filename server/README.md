@@ -40,6 +40,7 @@ Frontend: `npm run dev` ở thư mục gốc. `.env` đã đặt `VITE_API_URL=/
 3. Biến của service:
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
    - `NODE_ENV` = `production`
+   - `PORT`: bắt buộc, server không có cổng mặc định. Railway tự cấp; nếu tự đặt (ví dụ `8080`) thì domain trong Settings → Networking phải trỏ đúng cổng đó. Log khởi động in `Gaia API đang nghe cổng ...`.
    - `ADMIN_EMAIL`, `ADMIN_NAME`, `ADMIN_PASSWORD` (ít nhất 10 ký tự): tạo admin đầu tiên khi DB chưa có ai. Đăng nhập được rồi thì xoá `ADMIN_PASSWORD`.
 4. Generate domain cho service, ví dụ `gaia-api.up.railway.app`.
 5. Nạp dữ liệu thật từ máy điều phối (dùng URL public của Postgres trong tab Variables → `DATABASE_PUBLIC_URL`):

@@ -1,4 +1,4 @@
-import { ArrowLeft, Cloud, CloudOff, FileDown, LoaderCircle, Lock } from 'lucide-react'
+import { Cloud, CloudOff, FileDown, LoaderCircle, Lock, X } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ReassignConfirm } from '../components/CostExplanation'
@@ -14,6 +14,12 @@ import { useWeekContext, useWeekIssues } from '../hooks'
 import { exportSchoolSchedule } from '../services/exports'
 import { useStore } from '../store'
 import { useSync } from '../sync/engine'
+
+/** Tab mở từ nút "Xem toàn trang" thì đóng được; trình duyệt chặn đóng (ví dụ mở bằng link dán vào) thì về trang Theo trường. */
+const closeTab = (fallback: () => void) => {
+  window.close()
+  setTimeout(() => !window.closed && fallback(), 150)
+}
 
 /** Lớp ghép ghi "1.1 + 1.2": lọc theo lớp nào trong đó cũng ra ca này. */
 const classesOf = (l: Lesson) => (l.className ? l.className.split('+').map((c) => c.trim()).filter(Boolean) : [])
@@ -55,9 +61,9 @@ export function SchedulePage() {
   return (
     <div className="flex h-full flex-col bg-white">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-200 px-4 py-2.5">
-        <Link to={`/schools/${school.id}`} className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-slate-600 hover:bg-slate-100" title="Về trang Theo trường">
-          <ArrowLeft size={15} />Quay lại
-        </Link>
+        <button onClick={() => closeTab(() => navigate(`/schools/${school.id}`))} className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-slate-600 hover:bg-slate-100" title="Đóng tab lịch này">
+          <X size={15} />Đóng tab
+        </button>
         <select aria-label="Trường" value={school.id} onChange={(e) => navigate(`/schedule/${e.target.value}`)} className="max-w-[340px] font-semibold">
           {schools.map((s) => <option key={s.id} value={s.id}>{s.fullName}{load.get(s.id) ? ` · ${load.get(s.id)} ca` : ''}</option>)}
         </select>

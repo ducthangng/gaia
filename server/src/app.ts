@@ -4,7 +4,7 @@ import { compress } from 'hono/compress'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { cors } from 'hono/cors'
 import { HTTPException } from 'hono/http-exception'
-import { login, logout, LoginLimiter, SESSION_DAYS, userForToken, type User } from './auth'
+import { addUser, listUsers, login, logout, LoginLimiter, SESSION_DAYS, updateUser, UserInputError, userForToken, type User } from './auth'
 import type { Db } from './db'
 import { entityHistory, history, push, read, validate, type Entity } from './store'
 
@@ -25,6 +25,7 @@ export function createApp(db: Db, opts: AppOptions) {
 
   app.onError((err, c) => {
     if (err instanceof HTTPException) return c.json({ error: err.message }, err.status)
+    if (err instanceof UserInputError) return c.json({ error: err.message }, 400)
     console.error(err)
     return c.json({ error: 'Lỗi máy chủ' }, 500)
   })
@@ -105,6 +106,23 @@ export function createApp(db: Db, opts: AppOptions) {
     const id = c.req.query('id')
     if (collection && id) return c.json({ items: await entityHistory(db, collection, id) })
     return c.json({ items: await history(db, limit) })
+  })
+
+  // Quản lý tài khoản: chỉ admin.
+  const adminOnly = async (c: Context<Env>, next: () => Promise<void>) => {
+    if (c.get('user').role !== 'admin') return c.json({ error: 'Chỉ admin được quản lý tài khoản' }, 403)
+    await next()
+  }
+  const body = async (c: Context) => {
+    const b = await c.req.json().catch(() => null)
+    return b && typeof b === 'object' && !Array.isArray(b) ? (b as Record<string, unknown>) : {}
+  }
+  app.get('/users', adminOnly, async (c) => c.json({ users: await listUsers(db) }))
+  app.post('/users', adminOnly, async (c) => c.json({ user: await addUser(db, await body(c)) }, 201))
+  app.post('/users/:id', adminOnly, async (c) => {
+    const id = Number(c.req.param('id'))
+    if (!Number.isInteger(id)) return c.json({ error: 'id không hợp lệ' }, 400)
+    return c.json({ user: await updateUser(db, c.get('user').id, id, await body(c)) })
   })
 
   return app

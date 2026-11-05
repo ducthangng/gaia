@@ -12,6 +12,10 @@ input[type="checkbox"], input[type="radio"] { @apply accent-emerald-700; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 .tnum { font-variant-numeric: tabular-nums; }
+/* Thẻ trang trí ở trang đăng nhập trôi nhẹ lên xuống; tắt khi người dùng chọn giảm chuyển động. */
+@keyframes gaia-float { 0%, 100% { translate: 0 0; } 50% { translate: 0 -10px; } }
+.gaia-float { animation: gaia-float 6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .gaia-float { animation: none; } }
 .no-spin::-webkit-inner-spin-button, .no-spin::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .no-spin { -moz-appearance: textfield; appearance: textfield; }
 

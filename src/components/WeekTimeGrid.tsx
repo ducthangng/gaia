@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { CalendarClock, Info, Plus } from 'lucide-react'
+import { CalendarClock, Info, ListPlus, Plus } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ISSUE_META, type Issue } from '../domain/issues'
 import { axisHeight, axisY, buildAxis, isMorning, layoutDay, MIN_VISUAL_MIN, sessionBands } from '../domain/timetable'
@@ -16,6 +16,8 @@ const LANE_MIN_PX = 156
 const EMPTY_DAY_PX = 70
 const TIME_COL_PX = 68
 const SESSION_STRIP_PX = 16
+/** Trang toàn màn hình thu nhỏ cả lưới để nhìn bao quát được nhiều ngày hơn. */
+const FULL_PAGE_SCALE = 0.75
 
 // Nền theo buổi: tránh các màu đã dùng cho môn học (vàng, xanh ngọc, tím) và trạng thái (đỏ, xám).
 const slotColor = (min: number) => {
@@ -60,7 +62,8 @@ export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap, full
 
   const lanesOn = (d: string) => layoutDay(lessons.filter((l) => l.date === d)).lanes
   const weekWidth = TIME_COL_PX + weekDays.reduce((w, d) => w + (lanesOn(d) ? lanesOn(d) * LANE_MIN_PX : EMPTY_DAY_PX), 0)
-  const weekFits = width === 0 || weekWidth <= width
+  const scale = fullPage ? FULL_PAGE_SCALE : 1
+  const weekFits = width === 0 || weekWidth * scale <= width
   // Chưa chọn: tuần vừa khung thì xem cả tuần, không thì xem ngày đầu tiên có ca.
   const view = choice ?? (weekFits || !withLessons.length ? 'week' : withLessons[0])
   const dates = view === 'week' ? weekDays : [view]
@@ -98,6 +101,7 @@ export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap, full
           {fullPage && <Button className="!py-1 text-xs" aria-pressed={legendOpen} onClick={() => setLegendOpen((x) => !x)}><Info size={13} />Chú thích</Button>}
           {ctx.week.status === 'planning' ? <>
             <Button className="!py-1 text-xs" onClick={() => openLessonEditor({ newForSchool: schoolId, date: view === 'week' ? undefined : view })}><Plus size={13} />Thêm ca</Button>
+            <Button className="!py-1 text-xs" onClick={() => openLessonEditor({ manyForSchool: schoolId, date: view === 'week' ? undefined : view })}><ListPlus size={13} />Thêm nhiều ca</Button>
             <Button className="!py-1 text-xs" onClick={() => openLessonEditor({ bulkForSchool: schoolId, date: view === 'week' ? undefined : view })}><CalendarClock size={13} />Đổi lịch hàng loạt</Button>
           </> : <span className="text-xs text-slate-500">Tuần đã lưu trữ, chỉ xem</span>}
         </span>
@@ -109,23 +113,11 @@ export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap, full
         ))}
       </div>}
       <div className={clsx('overflow-auto', fullPage ? 'min-h-0 flex-1' : 'max-h-[78vh]')} data-testid="time-grid">
-        <div className="grid" style={{ gridTemplateColumns: columns, minWidth: 'max-content', width: '100%' }}>
+        <div className="grid" style={{ gridTemplateColumns: columns, minWidth: 'max-content', width: `${100 / scale}%`, zoom: scale }}>
           <div className="sticky left-0 top-0 z-30 border-b border-r border-slate-200 bg-slate-100 py-2.5 text-center text-xs font-semibold text-slate-600">Giờ</div>
           {days.map((d) => (
             <div key={d.date} className="sticky top-0 z-20 border-b border-r border-slate-200 bg-slate-100 px-1 py-2.5 text-center text-xs font-semibold text-slate-700">{dayLabel(d.date)}</div>
           ))}
-          {hasUntimed && <>
-            <div className="sticky left-0 z-10 border-b border-r border-slate-200 bg-white px-1 py-1 text-center text-[11px] leading-tight text-slate-500">Chưa rõ giờ</div>
-            {days.map((d) => (
-              <div key={d.date} className="grid content-start gap-1 border-b border-r border-slate-200 bg-white p-1" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${LANE_MIN_PX - 8}px, 1fr))` }} data-testid="untimed-cell">
-                {d.untimed.map((l) => (
-                  <div key={l.id} className="min-h-[76px]" data-testid="lesson-slot">
-                    <LessonChip lesson={l} ctx={ctx} show="teacher" fill mark={marks.get(l.id)} onShowOnMap={onShowOnMap} />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </>}
           <div className="sticky left-0 z-10 border-r border-slate-200 bg-white" style={{ height }}>
             {bands.map((b) => {
               const top = axisY(axis, b.from, ROW_PX, GAP_PX)
@@ -163,6 +155,19 @@ export function WeekTimeGrid({ schoolId, lessons, ctx, issues, onShowOnMap, full
               })}
             </div>
           ))}
+          {/* Ca chưa rõ giờ để dưới cùng: phần lưới giờ là thứ cần xem trước. */}
+          {hasUntimed && <>
+            <div className="sticky left-0 z-10 border-r border-t-2 border-slate-200 bg-white px-1 py-1 text-center text-[11px] leading-tight text-slate-500">Chưa rõ giờ</div>
+            {days.map((d) => (
+              <div key={d.date} className="grid content-start gap-1 border-r border-t-2 border-slate-200 bg-white p-1" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${LANE_MIN_PX - 8}px, 1fr))` }} data-testid="untimed-cell">
+                {d.untimed.map((l) => (
+                  <div key={l.id} className="min-h-[76px]" data-testid="lesson-slot">
+                    <LessonChip lesson={l} ctx={ctx} show="teacher" fill mark={marks.get(l.id)} onShowOnMap={onShowOnMap} />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </>}
         </div>
       </div>
     </div>

@@ -27,6 +27,8 @@ interface State extends World {
   lastEdit: { weekId: string; lessons: Lesson[]; label: string } | null
   saveLesson: (id: string, draft: LessonDraft) => void
   addLesson: (schoolId: string, draft: LessonDraft) => void
+  /** Thêm nhiều ca một lần; một lần hoàn tác bỏ cả nhóm. */
+  addLessons: (schoolId: string, drafts: LessonDraft[]) => number
   deleteLesson: (id: string) => void
   applyBulkChange: (scope: BulkScope, action: BulkAction) => number
   undoLastEdit: () => void
@@ -106,6 +108,14 @@ export const useStore = create<State>()((set, get) => {
         snapshot(weekId, 'Thêm ca')
         const lesson = newLesson(newId('e'), weekId, schoolId, draft)
         editWeek(weekId, (ls) => [...ls, lesson])
+      },
+      addLessons: (schoolId, drafts) => {
+        const weekId = get().activeWeekId
+        if (!drafts.length) return 0
+        snapshot(weekId, `Thêm ${drafts.length} ca`)
+        const fresh = drafts.map((d) => newLesson(newId('e'), weekId, schoolId, d))
+        editWeek(weekId, (ls) => [...ls, ...fresh])
+        return fresh.length
       },
       deleteLesson: (id) => {
         const week = weekOf(id)

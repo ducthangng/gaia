@@ -101,7 +101,7 @@ function SchoolDetail({ school: s, ctx, issues, listToggle }: { school: School; 
         </div>
       )}
       <Card title="Lịch học trong tuần" actions={
-        <Link to={`/schedule/${s.id}`} data-testid="open-schedule" className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-50" title="Mở lịch chiếm cả màn hình, không có thanh bên và bản đồ">
+        <Link to={`/schedule/${s.id}`} target="_blank" data-testid="open-schedule" className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-50" title="Mở lịch ở tab mới, chiếm cả màn hình">
           <Maximize2 size={13} />Xem toàn trang
         </Link>
       }>

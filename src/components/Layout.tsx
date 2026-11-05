@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { ArchiveRestore, Bell, CalendarOff, Calculator, CalendarRange, Database, GraduationCap, LayoutDashboard, Lock, ScanLine, School, Settings, ShieldAlert, WandSparkles } from 'lucide-react'
+import { ArchiveRestore, Bell, CalendarOff, Calculator, CalendarRange, Database, GraduationCap, LayoutDashboard, Lock, ScanLine, School, Settings, ShieldAlert, UsersRound, WandSparkles } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { shortDate } from '../domain/time'
 import { useActiveWeek, useStore } from '../store'
@@ -12,6 +12,7 @@ import { NewSchoolDialog } from './NewSchoolDialog'
 import { TeacherProfileDialog } from './TeacherProfileDialog'
 import { Button, Toaster } from './ui'
 import { SyncStatus } from './SyncStatus'
+import { useSync } from '../sync/engine'
 
 const NAV = [
   { to: '/', label: 'Bảng tổng quan', icon: LayoutDashboard, end: true },
@@ -25,11 +26,13 @@ const NAV = [
   { to: '/data', label: 'Nguồn dữ liệu', icon: Database },
   { to: '/settings', label: 'Cấu hình', icon: Settings },
 ]
+const ADMIN_NAV = [{ to: '/users', label: 'Tài khoản', icon: UsersRound, end: false }]
 
 export function Layout() {
   const weeks = useStore((s) => s.weeks)
   const setActiveWeek = useStore((s) => s.setActiveWeek)
   const anonymized = useStore((s) => s.anonymized)
+  const isAdmin = useSync((s) => s.user?.role === 'admin')
   const week = useActiveWeek()
   const archived = week.status === 'archived'
   const issues = useWeekIssues(useWeekContext())
@@ -42,7 +45,7 @@ export function Layout() {
           <div className="text-xs text-slate-500">Điều phối lịch dạy · Vũng Tàu</div>
         </div>
         <nav className="flex-1 space-y-1 p-3">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
+          {[...NAV, ...(isAdmin ? ADMIN_NAV : [])].map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => clsx('flex items-center gap-3 rounded-md px-3 py-2 font-medium', isActive ? 'bg-emerald-50 text-emerald-800' : 'text-slate-600 hover:bg-slate-100')}>
               <Icon size={15} />
               <span className="flex-1">{label}</span>

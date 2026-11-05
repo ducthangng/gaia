@@ -122,3 +122,37 @@ export function applyBulk(lessons: Lesson[], scope: BulkScope, action: BulkActio
   })
 }
 
+
+const hhmm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+
+/**
+ * Dòng tiếp theo khi thêm nhiều ca: cùng ngày, môn, GV; bắt đầu ngay khi ca trước kết thúc, dài bằng ca trước.
+ * Lớp để trống vì mỗi ca thường là một lớp khác. Ca trước chưa đủ giờ thì chỉ giữ ngày và môn.
+ */
+export function nextDraft(prev: LessonDraft): LessonDraft {
+  const start = toMin(prev.start)
+  const end = toMin(prev.end)
+  const timed = start !== null && end !== null && end > start && end + (end - start) <= 24 * 60
+  return {
+    date: prev.date,
+    start: timed ? hhmm(end) : '',
+    end: timed ? hhmm(end + (end - start)) : '',
+    className: '',
+    subject: prev.subject,
+    teacherId: prev.teacherId,
+    note: '',
+  }
+}
+
+/** Lỗi theo từng dòng (chỉ số dòng -> lỗi), bỏ qua dòng trống hoàn toàn. */
+export function draftsErrors(drafts: LessonDraft[]): Map<number, string[]> {
+  const out = new Map<number, string[]>()
+  drafts.forEach((d, i) => {
+    if (isBlankDraft(d)) return
+    const e = draftErrors(d)
+    if (e.length) out.set(i, e)
+  })
+  return out
+}
+
+export const isBlankDraft = (d: LessonDraft) => !d.start && !d.end && !d.className.trim() && !d.note.trim()

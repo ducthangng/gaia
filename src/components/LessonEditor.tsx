@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarClock, Check, Info, Trash2, X } from 'lucide-react'
+import { AlertTriangle, CalendarClock, Check, Copy, Info, Plus, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
 import { blockerLabel } from '../domain/constraints'
@@ -6,7 +6,7 @@ import { explainLessonChange } from '../domain/cost-explain'
 import { CostExplanationView } from './CostExplanation'
 import { EntityText } from './EntityLink'
 import { ISSUE_META, newIssues, weekIssues, type Issue } from '../domain/issues'
-import { applyBulk, applyDraft, draftErrors, draftFrom, newLesson, type BulkAction, type BulkScope, type LessonDraft } from '../domain/lesson-edit'
+import { applyBulk, applyDraft, draftErrors, draftFrom, draftsErrors, isBlankDraft, newLesson, nextDraft, type BulkAction, type BulkScope, type LessonDraft } from '../domain/lesson-edit'
 import { evaluate } from '../domain/recommend'
 import { byTime } from '../domain/route'
 import { dayLabel, SESSION_LABEL, weekDates } from '../domain/time'
@@ -21,6 +21,7 @@ const SUBJECTS = ['STEM', 'STEM-AI', 'STEM AI - ROBOTICS', 'CDS', 'CDS/AI', 'AI'
 type Request =
   | { lessonId: string }
   | { newForSchool: string; date?: string }
+  | { manyForSchool: string; date?: string }
   | { bulkForSchool: string; date?: string }
 
 const useRequest = create<{ request: Request | null; set: (r: Request | null) => void }>((set) => ({ request: null, set: (request) => set({ request }) }))
@@ -35,12 +36,13 @@ export function LessonEditor() {
   if (!request || ctx.week.status !== 'planning') return null
   const close = () => set(null)
   if ('bulkForSchool' in request) return <BulkDialog schoolId={request.bulkForSchool} date={request.date} ctx={ctx} close={close} />
+  if ('manyForSchool' in request) return <ManyDialog schoolId={request.manyForSchool} date={request.date} ctx={ctx} close={close} />
   if ('newForSchool' in request) return <EditDialog key="new" schoolId={request.newForSchool} initialDate={request.date} ctx={ctx} close={close} />
   const lesson = ctx.week.lessons.find((l) => l.id === request.lessonId)
   return lesson ? <EditDialog key={lesson.id} lesson={lesson} schoolId={lesson.schoolId} ctx={ctx} close={close} /> : null
 }
 
-function Modal({ title, close, children, footer, testId }: { title: string; close: () => void; children: ReactNode; footer: ReactNode; testId: string }) {
+function Modal({ title, close, children, footer, testId, wide = false }: { title: string; close: () => void; children: ReactNode; footer: ReactNode; testId: string; wide?: boolean }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
     window.addEventListener('keydown', onKey)
@@ -48,7 +50,7 @@ function Modal({ title, close, children, footer, testId }: { title: string; clos
   }, [close])
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div role="dialog" aria-modal="true" aria-label={title} data-testid={testId} className="flex max-h-[90vh] w-[620px] max-w-full flex-col rounded-lg bg-white shadow-xl">
+      <div role="dialog" aria-modal="true" aria-label={title} data-testid={testId} className={`flex max-h-[90vh] ${wide ? 'w-[1040px]' : 'w-[620px]'} max-w-full flex-col rounded-lg bg-white shadow-xl`}>
         <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
           <h2 className="flex items-center gap-2 font-semibold"><CalendarClock size={15} />{title}</h2>
           <button aria-label="Đóng" className="text-slate-400 hover:text-slate-700" onClick={close}><X size={16} /></button>
@@ -166,6 +168,108 @@ function EditDialog({ lesson, schoolId, initialDate, ctx, close }: { lesson?: Le
           <ImpactNotice fresh={fresh} ctx={ctx} />
           {hypothetical && <CostExplanationView explanation={explainLessonChange(lesson ?? null, hypothetical, ctx)} ctx={ctx} />}
         </>}
+    </Modal>
+  )
+}
+
+const emptyDraft = (date: string): LessonDraft => ({ date, start: '', end: '', className: '', subject: '', teacherId: '', note: '' })
+
+/**
+ * Thêm nhiều ca một lần, mỗi dòng một ca với giờ riêng. "Thêm dòng" (hoặc Enter) nối ca mới ngay sau ca trên,
+ * cùng thời lượng, nên nhập một buổi 5 tiết chỉ cần gõ giờ ca đầu và tên lớp.
+ */
+function ManyDialog({ schoolId, date, ctx, close }: { schoolId: string; date?: string; ctx: Ctx; close: () => void }) {
+  const addLessons = useStore((s) => s.addLessons)
+  const dates = weekDates(ctx.week.startDate)
+  const [rows, setRows] = useState<LessonDraft[]>(() => [emptyDraft(date ?? dates[0])])
+  const [focusRow, setFocusRow] = useState<number | null>(null)
+  const school = ctx.schoolById.get(schoolId)
+  const teachers = useMemo(() => ctx.world.teachers.filter((t) => t.active).sort((a, b) => a.id.localeCompare(b.id)), [ctx.world.teachers])
+  const errors = draftsErrors(rows)
+  const ready = rows.filter((r) => !isBlankDraft(r))
+  const next = useMemo(
+    () => (errors.size || !ready.length ? null : [...ctx.week.lessons, ...ready.map((d, i) => newLesson(`draft-${i}`, ctx.week.id, schoolId, d))]),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(rows), ctx.week.lessons],
+  )
+  const fresh = useImpact(next, ctx)
+
+  const patch = (i: number, p: Partial<LessonDraft>) => setRows((rs) => rs.map((r, k) => (k === i ? { ...r, ...p } : r)))
+  const insertAfter = (i: number) => {
+    setRows((rs) => [...rs.slice(0, i + 1), nextDraft(rs[i]), ...rs.slice(i + 1)])
+    setFocusRow(i + 1)
+  }
+  const duplicate = (i: number) => {
+    setRows((rs) => [...rs.slice(0, i + 1), { ...rs[i] }, ...rs.slice(i + 1)])
+    setFocusRow(i + 1)
+  }
+  const remove = (i: number) => setRows((rs) => (rs.length > 1 ? rs.filter((_, k) => k !== i) : [emptyDraft(rs[0].date)]))
+  // Dòng mới thêm: đưa con trỏ vào ô Lớp, vì giờ đã được điền sẵn.
+  useEffect(() => {
+    if (focusRow === null) return
+    document.querySelector<HTMLInputElement>(`[data-row="${focusRow}"] input[aria-label="Lớp"]`)?.focus()
+    setFocusRow(null)
+  }, [focusRow])
+  const onKey = (i: number) => (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      e.preventDefault()
+      insertAfter(i)
+    }
+  }
+  const save = () => {
+    const n = addLessons(schoolId, ready)
+    toast(`Đã thêm ${n} ca`, undoAction())
+    close()
+  }
+
+  return (
+    <Modal
+      testId="lesson-many"
+      wide
+      title="Thêm nhiều ca"
+      close={close}
+      footer={<>
+        <span className="text-xs text-slate-500">Enter: thêm dòng nối tiếp ca vừa nhập</span>
+        <span className="flex-1" />
+        <Button onClick={close}>Huỷ</Button>
+        <Button variant="primary" disabled={errors.size > 0 || !ready.length} onClick={save}>Thêm {ready.length || ''} ca</Button>
+      </>}
+    >
+      <div className="text-slate-600"><EntityText text={school?.fullName ?? ''} /></div>
+      <table className="w-full border-separate border-spacing-y-1 text-sm">
+        <thead>
+          <tr className="text-left text-xs font-medium text-slate-500">
+            <th className="w-8 font-medium">#</th><th className="font-medium">Ngày</th><th className="font-medium">Bắt đầu</th><th className="font-medium">Kết thúc</th>
+            <th className="font-medium">Lớp</th><th className="font-medium">Môn</th><th className="font-medium">Giáo viên</th><th />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} data-row={i} className="align-top" data-testid="many-row">
+              <td className="tnum pt-2 text-xs text-slate-400">{i + 1}</td>
+              <td><select aria-label="Ngày" value={r.date} onChange={(e) => patch(i, { date: e.target.value })}>{dates.map((x) => <option key={x} value={x}>{dayLabel(x)}</option>)}</select></td>
+              <td><input aria-label="Bắt đầu" type="time" value={r.start} onKeyDown={onKey(i)} onChange={(e) => patch(i, { start: e.target.value })} /></td>
+              <td><input aria-label="Kết thúc" type="time" value={r.end} onKeyDown={onKey(i)} onChange={(e) => patch(i, { end: e.target.value })} /></td>
+              <td><input aria-label="Lớp" className="w-24" value={r.className} onKeyDown={onKey(i)} onChange={(e) => patch(i, { className: e.target.value })} /></td>
+              <td><select aria-label="Môn" value={r.subject} onChange={(e) => patch(i, { subject: e.target.value })}>
+                <option value="">Chưa rõ</option>
+                {SUBJECTS.map((x) => <option key={x}>{x}</option>)}
+              </select></td>
+              <td><select aria-label="Giáo viên" className="w-52" value={r.teacherId} onChange={(e) => patch(i, { teacherId: e.target.value })}>
+                <option value="">Chưa có giáo viên</option>
+                {teachers.map((t) => <option key={t.id} value={t.id}>{teacherLabel(t)}</option>)}
+              </select></td>
+              <td className="whitespace-nowrap pt-1">
+                <button aria-label="Nhân bản dòng" title="Nhân bản dòng (giữ nguyên giờ, đổi lớp)" className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={() => duplicate(i)}><Copy size={14} /></button>
+                <button aria-label="Xoá dòng" title="Xoá dòng" className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700" onClick={() => remove(i)}><Trash2 size={14} /></button>
+              </td>
+            </tr>
+          )).flatMap((row, i) => errors.has(i) ? [row, <tr key={`e${i}`}><td /><td colSpan={7} className="pb-1 text-xs text-red-700" data-testid="many-error">{errors.get(i)!.join('. ')}.</td></tr>] : [row])}
+        </tbody>
+      </table>
+      <Button className="!py-1 text-xs" onClick={() => insertAfter(rows.length - 1)}><Plus size={13} />Thêm dòng</Button>
+      <p className="text-xs text-slate-500">Dòng mới tự lấy giờ bắt đầu bằng giờ kết thúc của dòng trên và cùng thời lượng; cùng ngày, môn, giáo viên. Dòng để trống hoàn toàn sẽ được bỏ qua. Giáo viên có thể để trống và gán sau.</p>
+      {errors.size === 0 && ready.length > 0 && <ImpactNotice fresh={fresh} ctx={ctx} />}
     </Modal>
   )
 }

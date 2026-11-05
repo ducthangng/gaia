@@ -92,3 +92,76 @@ export class LoginLimiter {
     this.hits.delete(key)
   }
 }
+
+export interface UserRow extends User {
+  disabled: boolean
+  createdAt: string
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** Lỗi do dữ liệu người dùng nhập: trả 400 kèm thông báo. */
+export class UserInputError extends Error {}
+
+const USER_COLUMNS = 'id, email, name, role, disabled, created_at as "createdAt"'
+
+export async function listUsers(db: Db): Promise<UserRow[]> {
+  const { rows } = await db.query(`select ${USER_COLUMNS} from users order by disabled, lower(name)`)
+  return rows
+}
+
+/** Tạo tài khoản từ giao diện admin. Khác createUser: email đã có thì báo lỗi, không đặt lại mật khẩu của người khác. */
+export async function addUser(db: Db, input: Record<string, unknown>): Promise<UserRow> {
+  const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : ''
+  const name = typeof input.name === 'string' ? input.name.trim() : ''
+  const password = typeof input.password === 'string' ? input.password : ''
+  const role = input.role === 'admin' ? 'admin' : 'editor'
+  if (!EMAIL.test(email)) throw new UserInputError('Email không hợp lệ')
+  if (!name) throw new UserInputError('Cần có tên')
+  if (password.length < 10) throw new UserInputError('Mật khẩu cần ít nhất 10 ký tự')
+  const { rows } = await db.query(
+    `insert into users(email, name, password_hash, role) values ($1, $2, $3, $4)
+     on conflict (email) do nothing returning ${USER_COLUMNS}`,
+    [email, name, await hashPassword(password), role],
+  )
+  if (!rows[0]) throw new UserInputError(`Đã có tài khoản ${email}`)
+  return rows[0]
+}
+
+/**
+ * Sửa tài khoản: tên, vai trò, khoá/mở, đặt lại mật khẩu. Admin không tự khoá hay tự bỏ quyền admin được,
+ * để hệ thống không bao giờ mất người quản trị. Đặt lại mật khẩu hoặc khoá thì đăng xuất mọi phiên của người đó.
+ */
+export async function updateUser(db: Db, actorId: number, id: number, input: Record<string, unknown>): Promise<UserRow> {
+  const sets: string[] = []
+  const args: unknown[] = []
+  const add = (column: string, v: unknown) => {
+    args.push(v)
+    sets.push(`${column} = $` + args.length)
+  }
+  if (input.name !== undefined) {
+    if (typeof input.name !== 'string' || !input.name.trim()) throw new UserInputError('Cần có tên')
+    add('name', input.name.trim())
+  }
+  if (input.role !== undefined) {
+    if (input.role !== 'admin' && input.role !== 'editor') throw new UserInputError('Vai trò không hợp lệ')
+    if (id === actorId && input.role !== 'admin') throw new UserInputError('Không tự bỏ quyền admin của chính mình được')
+    add('role', input.role)
+  }
+  if (input.disabled !== undefined) {
+    if (typeof input.disabled !== 'boolean') throw new UserInputError('disabled không hợp lệ')
+    if (id === actorId && input.disabled) throw new UserInputError('Không tự khoá tài khoản của chính mình được')
+    add('disabled', input.disabled)
+  }
+  const resetPassword = input.password !== undefined
+  if (resetPassword) {
+    if (typeof input.password !== 'string' || input.password.length < 10) throw new UserInputError('Mật khẩu cần ít nhất 10 ký tự')
+    add('password_hash', await hashPassword(input.password))
+  }
+  if (!sets.length) throw new UserInputError('Không có gì để sửa')
+  args.push(id)
+  const { rows } = await db.query(`update users set ${sets.join(', ')} where id = $` + args.length + ` returning ${USER_COLUMNS}`, args)
+  if (!rows[0]) throw new UserInputError('Không có tài khoản này')
+  if ((resetPassword && id !== actorId) || input.disabled === true) await db.query('delete from sessions where user_id = $1', [id])
+  return rows[0]
+}

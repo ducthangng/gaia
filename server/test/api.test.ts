@@ -65,6 +65,49 @@ describe('auth', () => {
   })
 })
 
+describe('quản lý tài khoản', () => {
+  const users = async (cookie: string) => (await (await app.request('/api/users', { headers: { cookie } })).json()).users as { id: number; email: string; disabled: boolean; role: string }[]
+
+  it('chỉ admin xem và tạo được tài khoản', async () => {
+    const b = await signIn('b@gaia.vn', 'mat-khau-dai-2')
+    expect((await app.request('/api/users', { headers: { cookie: b } })).status).toBe(403)
+    expect((await app.request('/api/users', json({ email: 'x@gaia.vn', name: 'X', password: 'mat-khau-dai-x' }, b))).status).toBe(403)
+  })
+
+  it('admin tạo tài khoản; email trùng hoặc mật khẩu ngắn bị từ chối', async () => {
+    const a = await signIn('a@gaia.vn', 'mat-khau-dai-1')
+    const res = await app.request('/api/users', json({ email: ' Moi@Gaia.vn ', name: 'Mới', password: 'mat-khau-moi-1' }, a))
+    expect(res.status).toBe(201)
+    expect((await res.json()).user).toMatchObject({ email: 'moi@gaia.vn', role: 'editor', disabled: false })
+    const dup = await app.request('/api/users', json({ email: 'moi@gaia.vn', name: 'Trùng', password: 'mat-khau-khac-1' }, a))
+    expect(dup.status).toBe(400)
+    expect((await dup.json()).error).toContain('Đã có')
+    expect((await app.request('/api/users', json({ email: 'ngan@gaia.vn', name: 'N', password: 'ngan' }, a))).status).toBe(400)
+    // Mật khẩu cũ không bị đặt lại do tạo trùng.
+    await signIn('moi@gaia.vn', 'mat-khau-moi-1')
+  })
+
+  it('khoá thì đăng xuất ngay; đặt lại mật khẩu thì mật khẩu cũ hết dùng', async () => {
+    const a = await signIn('a@gaia.vn', 'mat-khau-dai-1')
+    const moi = (await users(a)).find((u) => u.email === 'moi@gaia.vn')!
+    const session = await signIn('moi@gaia.vn', 'mat-khau-moi-1')
+    expect((await app.request(`/api/users/${moi.id}`, json({ disabled: true }, a))).status).toBe(200)
+    expect((await app.request('/api/auth/me', { headers: { cookie: session } })).status).toBe(401)
+    expect((await app.request('/api/auth/login', json({ email: 'moi@gaia.vn', password: 'mat-khau-moi-1' }))).status).toBe(401)
+    await app.request(`/api/users/${moi.id}`, json({ disabled: false, password: 'mat-khau-moi-2' }, a))
+    expect((await app.request('/api/auth/login', json({ email: 'moi@gaia.vn', password: 'mat-khau-moi-1' }))).status).toBe(401)
+    await signIn('moi@gaia.vn', 'mat-khau-moi-2')
+  })
+
+  it('admin không tự khoá hay tự bỏ quyền admin được', async () => {
+    const a = await signIn('a@gaia.vn', 'mat-khau-dai-1')
+    const me = (await users(a)).find((u) => u.email === 'a@gaia.vn')!
+    expect((await app.request(`/api/users/${me.id}`, json({ disabled: true }, a))).status).toBe(400)
+    expect((await app.request(`/api/users/${me.id}`, json({ role: 'editor' }, a))).status).toBe(400)
+    expect((await users(a)).find((u) => u.id === me.id)).toMatchObject({ role: 'admin', disabled: false })
+  })
+})
+
 describe('đồng bộ', () => {
   it('ghi, đọc lại, đọc phần thay đổi theo rev', async () => {
     const cookie = await signIn('a@gaia.vn', 'mat-khau-dai-1')

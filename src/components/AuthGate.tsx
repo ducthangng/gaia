@@ -1,17 +1,13 @@
 import { LoaderCircle, LogIn } from 'lucide-react'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { api, API_MODE, ApiError, type ApiUser } from '../sync/api'
+import { api, ApiError, type ApiUser } from '../sync/api'
 import { hydrate, schedule, useSync } from '../sync/engine'
 import { Button } from './ui'
 
 type Gate = { kind: 'checking' } | { kind: 'login' } | { kind: 'loading' } | { kind: 'empty' } | { kind: 'ready' } | { kind: 'error'; message: string }
 
-/** Có server: kiểm tra đăng nhập và nạp dữ liệu trước khi hiện app. Bản demo đi thẳng vào app. */
+/** Kiểm tra đăng nhập và nạp dữ liệu từ server trước khi hiện app. */
 export function AuthGate({ children }: { children: ReactNode }) {
-  return API_MODE ? <Gated>{children}</Gated> : <>{children}</>
-}
-
-function Gated({ children }: { children: ReactNode }) {
   const [gate, setGate] = useState<Gate>({ kind: 'checking' })
   const user = useSync((s) => s.user)
 

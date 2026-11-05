@@ -1,11 +1,15 @@
-# Gaia – Hệ thống điều phối lịch dạy (giai đoạn Frontend)
+# Gaia – Hệ thống điều phối lịch dạy
+
+Frontend (thư mục gốc) và backend ([server/](server/README.md)). Mọi dữ liệu lịch nằm trên server, cần đăng nhập; trình duyệt không lưu gì.
 
 ```bash
 npm install
-npm run dev     # dùng dữ liệu thật nếu có src/data/seed.local.json
+npm run dev     # cần backend chạy ở localhost:3000, xem server/README.md
 npm test
-npm run build   # luôn dùng seed đã ẩn danh
+npm run build
 ```
+
+`.env` đặt `VITE_API_URL=/api`: app gọi API cùng domain. Khi dev, Vite chuyển `/api` sang `localhost:3000`; trên Vercel, rewrite trong `vercel.json` chuyển sang Railway.
 
 ## Dữ liệu
 
@@ -17,10 +21,13 @@ python3 scripts/extract_workbook.py "<lịch>.xlsx" src/data/seed.local.json --d
 python3 scripts/extract_workbook.py "<lịch>.xlsx" src/data/seed.json --data data.xlsx --anonymize
 ```
 
-- `seed.local.json`: có SĐT và địa chỉ nhà của giáo viên. Chỉ nạp khi chạy `dev`, không commit, không deploy.
-- `seed.json`: dữ liệu của mọi bản build. Có tên giáo viên; không có SĐT, địa chỉ nhà, vị trí nhà, ghi chú và người phụ trách. File này được commit, nên tên giáo viên sẽ công khai nếu repo công khai.
+Nạp vào database bằng `cd server && npm run seed -- <file>` (xem [server/README.md](server/README.md)).
 
-Không đặt `VITE_API_URL`: chỉnh sửa lưu ở `localStorage` của trình duyệt (bản demo). Đặt `VITE_API_URL=/api`: dữ liệu, đăng nhập và lịch sử sửa đổi nằm trên backend, xem [server/README.md](server/README.md).
+- `seed.local.json`: có SĐT và địa chỉ nhà của giáo viên. Dữ liệu thật để nạp lên server, không commit.
+- `seed.json`: bản ẩn danh, dùng cho test và DB thử. Có tên giáo viên; không có SĐT, địa chỉ nhà, vị trí nhà, ghi chú và người phụ trách. File này được commit, nên tên giáo viên sẽ công khai nếu repo công khai.
+- `places.json`: tâm phường/xã (công khai), frontend dùng để định vị khi sửa địa chỉ. Script tạo lại cùng với seed.
+
+Frontend không đóng gói seed: dữ liệu chỉ đến từ server sau khi đăng nhập.
 
 ### Toạ độ và bản đồ
 

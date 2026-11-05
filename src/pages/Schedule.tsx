@@ -13,7 +13,6 @@ import type { Lesson } from '../domain/types'
 import { useWeekContext, useWeekIssues } from '../hooks'
 import { exportSchoolSchedule } from '../services/exports'
 import { useStore } from '../store'
-import { API_MODE } from '../sync/api'
 import { useSync } from '../sync/engine'
 
 /** Lớp ghép ghi "1.1 + 1.2": lọc theo lớp nào trong đó cũng ra ca này. */
@@ -75,7 +74,7 @@ export function SchedulePage() {
         )}
         {ctx.week.status === 'archived' && <span className="inline-flex items-center gap-1 text-xs text-slate-500"><Lock size={13} />Đã lưu trữ</span>}
         <span className="ml-auto flex items-center gap-2">
-          {API_MODE && <SyncDot />}
+          <SyncDot />
           <Badge tone={cov.ratio < 1 ? 'red' : 'green'}>Độ phủ {cov.covered}/{cov.required}</Badge>
           <Button onClick={() => exportSchoolSchedule(ctx, school.id)}><FileDown size={14} />Excel</Button>
           <Button onClick={() => window.open(`/print/school/${school.id}`, '_blank')}><FileDown size={14} />PDF</Button>

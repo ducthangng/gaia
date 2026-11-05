@@ -31,7 +31,7 @@ DATABASE_URL=postgres://... npm run user -- add ban@gaia.vn "Tên" --admin
 npm test                                        # dùng PGlite, không cần Postgres
 ```
 
-Frontend: thêm `VITE_API_URL=/api` vào `.env.local` ở thư mục gốc rồi `npm run dev`. Vite chuyển `/api` sang `localhost:3000`. Không có `VITE_API_URL` thì app chạy bản demo lưu ở localStorage như trước.
+Frontend: `npm run dev` ở thư mục gốc. `.env` đã đặt `VITE_API_URL=/api`, Vite chuyển `/api` sang `localhost:3000` (đổi bằng `API_PROXY`).
 
 ## Deploy lên Railway
 
@@ -47,7 +47,7 @@ Frontend: thêm `VITE_API_URL=/api` vào `.env.local` ở thư mục gốc rồi
    cd server
    DATABASE_PUBLIC_URL='postgres://...' npm run seed -- ../src/data/seed.local.json
    ```
-6. Frontend trên Vercel: thêm rewrite đứng **trước** rewrite hiện có trong `vercel.json`, và biến `VITE_API_URL=/api`:
+6. Frontend trên Vercel: thêm rewrite đứng **trước** rewrite hiện có trong `vercel.json` (`VITE_API_URL=/api` đã có trong `.env`):
    ```json
    { "rewrites": [
      { "source": "/api/:path*", "destination": "https://gaia-api.up.railway.app/api/:path*" },

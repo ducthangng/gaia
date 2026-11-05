@@ -484,6 +484,9 @@ def main():
     out["places"] = [{"name": p, "lat": known[p]["lat"], "lng": known[p]["lng"]} for p in PLACES if p in known]
 
     json.dump(out, open(args.out, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
+    # Frontend không đóng gói seed (dữ liệu lấy từ server) nhưng cần tâm phường/xã để định vị địa chỉ khi sửa.
+    places_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "data", "places.json")
+    json.dump(out["places"], open(places_path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     n = sum(len(w["lessons"]) for w in weeks)
     print(f"{args.out}: {len(out['teachers'])} GV, {len(out['schools'])} trường, {len(weeks)} tuần, {n} ca, {len(leave_list)} nghỉ")
     for w in weeks:

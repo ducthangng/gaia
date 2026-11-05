@@ -36,7 +36,7 @@ export async function hydrate(user: ApiUser) {
   const state = applyEntities(emptyState(), snap.entities)
   const wanted = useStore.getState().activeWeekId
   const activeWeekId = state.weeks.some((w) => w.id === wanted) ? wanted : state.weeks.at(-1)?.id ?? ''
-  useStore.setState({ ...state, activeWeekId, lastEdit: null, beforeReset: null })
+  useStore.setState({ ...state, activeWeekId, lastEdit: null })
   base = indexState(state)
   rev = snap.rev
   useSync.setState({ user, phase: 'saved', pending: 0, message: null })

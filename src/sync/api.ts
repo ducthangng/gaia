@@ -1,6 +1,5 @@
-/** Có VITE_API_URL thì dữ liệu nằm trên server; không có thì chạy bản demo lưu ở localStorage như trước. */
-export const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || null
-export const API_MODE = API_URL !== null
+/** Gốc của API, đặt trong .env. Mặc định /api: cùng domain với app, qua proxy của Vite (dev) hoặc rewrite của Vercel. */
+export const API_URL = ((import.meta.env.VITE_API_URL as string | undefined) || '/api').replace(/\/$/, '')
 
 export interface ApiUser {
   id: number

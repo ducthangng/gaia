@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { MapPin, X } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
-import { seed } from '../data/load'
+import { places } from '../data/load'
 import { isPrecise } from '../domain/geo'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { emptyProfile, nextTeacherId, teacherIdError } from '../domain/create-records'
@@ -63,7 +63,7 @@ function Dialog({ id, close }: { id: string; close: () => void }) {
 }
 
 function AddressNotice({ address, dropped }: { address: string; dropped: number }) {
-  const located = locateAddress(address, seed.places ?? [])
+  const located = locateAddress(address, places)
   return (
     <div className="space-y-0.5 rounded-md bg-amber-50 px-3 py-2 text-amber-950" data-testid="address-notice">
       <div className="flex items-center gap-1.5"><MapPin size={13} />{located.geo ? (isPrecise(located.geo) ? 'Nhận ra vị trí chính xác từ Plus Code.' : `Nhận ra ${located.area}: đặt vị trí nhà ở tâm phường/xã.`) : 'Chưa nhận ra vị trí từ địa chỉ này, bản đồ sẽ không vẽ được chặng từ nhà.'}</div>

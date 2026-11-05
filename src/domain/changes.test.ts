@@ -10,7 +10,6 @@ import { coverOptions, openLessons } from './cover-plan'
 import { buildWeekSheet, creditsAt, lessonFill, sheetToGrid, weekSheetName, FILLS } from './week-sheet'
 import { parseWeekGrid } from './sheet-grid'
 import { explainLessonChange, tierText } from './cost-explain'
-import { dataDiff } from './data-diff'
 import { createSchool, createTeacher, emptyProfile, nextTeacherId, schoolDraftErrors, schoolFullName, teacherIdError } from './create-records'
 import { rankCandidates } from './recommend'
 import { applySchoolAddress, missingSchoolFields, missingTeacherFields, parseCoordinate } from './data-quality'
@@ -690,35 +689,6 @@ describe('giải thích chi phí khi đổi giáo viên', () => {
         expect(r.changes.find((x) => x.teacherId === cand.teacher.id)!.delta).toBe(cand.extraCost)
       }
     }
-  })
-})
-
-describe('so dữ liệu hiện tại với bản mới nhất', () => {
-  const base = { teachers: seed.teachers, schools: seed.schools, leaves: seed.leaves, weeks: seed.weeks, kmOverrides: {}, settings: DEFAULT_SETTINGS, distances: seed.distances }
-  it('chưa sửa gì thì không có khác biệt', () => {
-    expect(dataDiff(base, seed, DEFAULT_SETTINGS)).toEqual([])
-  })
-  it('liệt kê đúng từng loại thay đổi', () => {
-    const w = seed.weeks.at(-1)!
-    const nextMonday = new Date(Date.parse(`${w.startDate}T00:00:00Z`) + 7 * 86400_000).toISOString().slice(0, 10)
-    const changed = {
-      ...base,
-      teachers: [...seed.teachers.map((t) => (t.id === 'VT001' ? { ...t, phone: '0901234567' } : t)), teacher({ id: 'VT999', isNew: true })],
-      schools: seed.schools.slice(1),
-      leaves: seed.leaves.slice(2),
-      weeks: [...seed.weeks.map((x) => (x.id === w.id ? { ...x, lessons: x.lessons.map((l, i) => (i < 3 ? { ...l, teacherId: 'VT001' } : l)).slice(1) } : x)), { ...w, id: nextMonday }],
-      kmOverrides: { a: 1 },
-      settings: { ...DEFAULT_SETTINGS, ratePerKm: 1 },
-    }
-    const text = dataDiff(changed, seed, DEFAULT_SETTINGS).join(' | ')
-    expect(text).toContain('1 giáo viên thêm mới')
-    expect(text).toContain('1 giáo viên đã sửa')
-    expect(text).toContain('1 trường bị thiếu')
-    expect(text).toContain('1 tuần tạo thêm')
-    expect(text).toContain('lịch tuần')
-    expect(text).toContain('2 ngày nghỉ')
-    expect(text).toContain('1 số km sửa tay')
-    expect(text).toContain('Cấu hình')
   })
 })
 

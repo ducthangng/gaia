@@ -1,5 +1,4 @@
 import { RotateCcw } from 'lucide-react'
-import { openResetDialog } from '../components/ResetDataDialog'
 import { Badge, Button, Card, PageHeader, toast } from '../components/ui'
 import { DEFAULT_SETTINGS, type Settings, type Tier } from '../domain/types'
 import { useStore } from '../store'
@@ -98,7 +97,6 @@ export function SettingsPage() {
       </div>
       <div className="flex gap-2">
         <Button onClick={() => { update(DEFAULT_SETTINGS); toast('Đã khôi phục cấu hình mặc định') }}><RotateCcw size={13} />Khôi phục cấu hình mặc định</Button>
-<Button variant="danger" onClick={openResetDialog}>Về dữ liệu mới nhất</Button>
       </div>
     </div>
   )

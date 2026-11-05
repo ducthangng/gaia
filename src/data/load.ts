@@ -1,8 +1,8 @@
-import type { Seed } from '../domain/types'
-import publicSeed from './seed.json'
+import type { Place } from '../domain/types'
+import placesJson from './places.json'
 
-// seed.local.json chứa SĐT và địa chỉ nhà thật: chỉ nạp khi chạy dev trên máy điều phối.
-// Bản build dùng seed.json: có tên giáo viên, không có SĐT, địa chỉ nhà, vị trí nhà.
-const local = import.meta.env.DEV ? import.meta.glob('./seed.local.json', { eager: true, import: 'default' }) : {}
-
-export const seed = (Object.values(local)[0] ?? publicSeed) as unknown as Seed
+/**
+ * Dữ liệu lịch lấy từ server (xem src/sync). Frontend chỉ đóng gói tâm phường/xã: thông tin công khai,
+ * dùng để định vị khi người dùng sửa địa chỉ. scripts/extract_workbook.py tạo lại file này.
+ */
+export const places = placesJson as Place[]

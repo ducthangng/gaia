@@ -13,6 +13,7 @@ import { SchoolsPage } from './pages/Schools'
 import { SettingsPage } from './pages/Settings'
 import { TeachersPage } from './pages/Teachers'
 import { UsersPage } from './pages/Users'
+import { TodosPage } from './pages/Todos'
 import { WeeksPage } from './pages/Weeks'
 
 export function App() {
@@ -34,6 +35,7 @@ export function App() {
             <Route path="data" element={<DataPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="users" element={<UsersPage />} />
+            <Route path="todos" element={<TodosPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

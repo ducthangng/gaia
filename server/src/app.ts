@@ -7,6 +7,7 @@ import { HTTPException } from 'hono/http-exception'
 import { addUser, listUsers, login, logout, LoginLimiter, SESSION_DAYS, updateUser, UserInputError, userForToken, type User } from './auth'
 import type { Db } from './db'
 import { entityHistory, history, push, read, validate, type Entity } from './store'
+import { addTodo, deleteTodo, listTodos, updateTodo } from './todos'
 
 export interface AppOptions {
   /** Cookie Secure: bật ở môi trường thật (HTTPS). */
@@ -123,6 +124,20 @@ export function createApp(db: Db, opts: AppOptions) {
     const id = Number(c.req.param('id'))
     if (!Number.isInteger(id)) return c.json({ error: 'id không hợp lệ' }, 400)
     return c.json({ user: await updateUser(db, c.get('user').id, id, await body(c)) })
+  })
+
+  // Việc cần làm / góp ý về app: ai cũng thêm được, admin đánh dấu xong.
+  const todoId = (c: Context) => {
+    const id = Number(c.req.param('id'))
+    if (!Number.isInteger(id)) throw new UserInputError('id không hợp lệ')
+    return id
+  }
+  app.get('/todos', async (c) => c.json({ todos: await listTodos(db) }))
+  app.post('/todos', async (c) => c.json({ todo: await addTodo(db, c.get('user'), await body(c)) }, 201))
+  app.post('/todos/:id', async (c) => c.json({ todo: await updateTodo(db, c.get('user'), todoId(c), await body(c)) }))
+  app.post('/todos/:id/delete', async (c) => {
+    await deleteTodo(db, c.get('user'), todoId(c))
+    return c.json({ ok: true })
   })
 
   return app

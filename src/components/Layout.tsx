@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { ArchiveRestore, Bell, CalendarOff, Calculator, CalendarRange, Database, GraduationCap, LayoutDashboard, Lock, ScanLine, School, Settings, ShieldAlert, UsersRound, WandSparkles } from 'lucide-react'
+import { ArchiveRestore, Bell, CalendarOff, Calculator, CalendarRange, Database, GraduationCap, LayoutDashboard, ListTodo, Lock, ScanLine, School, Settings, ShieldAlert, UsersRound, WandSparkles } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { shortDate } from '../domain/time'
 import { useActiveWeek, useStore } from '../store'
@@ -13,6 +13,8 @@ import { TeacherProfileDialog } from './TeacherProfileDialog'
 import { Button, Toaster } from './ui'
 import { SyncStatus } from './SyncStatus'
 import { useSync } from '../sync/engine'
+import { useEffect } from 'react'
+import { loadTodos, useTodos } from '../pages/Todos'
 
 const NAV = [
   { to: '/', label: 'Bảng tổng quan', icon: LayoutDashboard, end: true },
@@ -25,6 +27,7 @@ const NAV = [
   { to: '/import', label: 'Nhập ảnh lịch (OCR)', icon: ScanLine },
   { to: '/data', label: 'Nguồn dữ liệu', icon: Database },
   { to: '/settings', label: 'Cấu hình', icon: Settings },
+  { to: '/todos', label: 'Việc cần làm', icon: ListTodo },
 ]
 const ADMIN_NAV = [{ to: '/users', label: 'Tài khoản', icon: UsersRound, end: false }]
 
@@ -33,6 +36,13 @@ export function Layout() {
   const setActiveWeek = useStore((s) => s.setActiveWeek)
   const anonymized = useStore((s) => s.anonymized)
   const isAdmin = useSync((s) => s.user?.role === 'admin')
+  const openTodos = useTodos((s) => s.todos?.filter((t) => !t.done).length ?? 0)
+  // Số việc đang chờ trên menu: tải khi mở app và mỗi phút, để thấy góp ý mới của người khác.
+  useEffect(() => {
+    loadTodos()
+    const timer = setInterval(() => document.visibilityState === 'visible' && loadTodos(), 60_000)
+    return () => clearInterval(timer)
+  }, [])
   const week = useActiveWeek()
   const archived = week.status === 'archived'
   const issues = useWeekIssues(useWeekContext())
@@ -50,6 +60,7 @@ export function Layout() {
               <Icon size={15} />
               <span className="flex-1">{label}</span>
               {to === '/alerts' && urgent > 0 && <span data-testid="alert-count" className="tnum rounded-full bg-red-600 px-1.5 text-[11px] font-semibold text-white">{urgent}</span>}
+              {to === '/todos' && openTodos > 0 && <span data-testid="todo-count" title={`${openTodos} việc đang chờ`} className="tnum rounded-full bg-amber-500 px-1.5 text-[11px] font-semibold text-white">{openTodos}</span>}
             </NavLink>
           ))}
         </nav>

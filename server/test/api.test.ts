@@ -108,6 +108,45 @@ describe('quản lý tài khoản', () => {
   })
 })
 
+describe('todo / góp ý', () => {
+  type T = { id: number; title: string; done: boolean; reply: string; author: { name: string } | null; doneBy: string | null }
+  const list = async (cookie: string) => (await (await app.request('/api/todos', { headers: { cookie } })).json()).todos as T[]
+
+  it('ai cũng thêm được; người tạo sửa được khi chưa xong; người khác thì không', async () => {
+    const b = await signIn('b@gaia.vn', 'mat-khau-dai-2')
+    const a = await signIn('a@gaia.vn', 'mat-khau-dai-1')
+    const res = await app.request('/api/todos', json({ title: '  Nút xuất PDF bị lệch  ', detail: 'Ở trang Theo trường' }, b))
+    expect(res.status).toBe(201)
+    const t = (await res.json()).todo as T
+    expect(t).toMatchObject({ title: 'Nút xuất PDF bị lệch', done: false, author: { name: 'Bình' } })
+    expect((await app.request(`/api/todos/${t.id}`, json({ title: 'Sửa lại' }, b))).status).toBe(200)
+    expect((await app.request('/api/todos', json({ title: '   ' }, b))).status).toBe(400)
+    // Biên tập viên không đánh dấu xong được, kể cả việc của mình.
+    expect((await app.request(`/api/todos/${t.id}`, json({ done: true }, b))).status).toBe(400)
+    // Admin đánh dấu xong kèm phản hồi.
+    const done = (await (await app.request(`/api/todos/${t.id}`, json({ done: true, reply: 'Đã sửa ở bản 0.4' }, a))).json()).todo as T
+    expect(done).toMatchObject({ done: true, reply: 'Đã sửa ở bản 0.4', doneBy: 'An' })
+    // Xong rồi thì người tạo không sửa, không xoá được nữa.
+    expect((await app.request(`/api/todos/${t.id}`, json({ title: 'Đổi' }, b))).status).toBe(400)
+    expect((await app.request(`/api/todos/${t.id}/delete`, json({}, b))).status).toBe(400)
+    // Mở lại thì xoá thời điểm xong.
+    const reopened = (await (await app.request(`/api/todos/${t.id}`, json({ done: false }, a))).json()).todo as T
+    expect(reopened).toMatchObject({ done: false, doneBy: null })
+  })
+
+  it('việc chưa xong đứng trước; người khác không xoá được việc của mình', async () => {
+    const a = await signIn('a@gaia.vn', 'mat-khau-dai-1')
+    const b = await signIn('b@gaia.vn', 'mat-khau-dai-2')
+    const mine = (await (await app.request('/api/todos', json({ title: 'Việc của An' }, a))).json()).todo as T
+    expect((await app.request(`/api/todos/${mine.id}/delete`, json({}, b))).status).toBe(400)
+    await app.request(`/api/todos/${mine.id}`, json({ done: true }, a))
+    const todos = await list(b)
+    expect(todos.findIndex((t) => !t.done)).toBeLessThan(todos.findIndex((t) => t.done))
+    expect((await app.request(`/api/todos/${mine.id}/delete`, json({}, a))).status).toBe(200)
+    expect((await list(a)).some((t) => t.id === mine.id)).toBe(false)
+  })
+})
+
 describe('đồng bộ', () => {
   it('ghi, đọc lại, đọc phần thay đổi theo rev', async () => {
     const cookie = await signIn('a@gaia.vn', 'mat-khau-dai-1')

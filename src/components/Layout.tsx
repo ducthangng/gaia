@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { ArchiveRestore, Bell, CalendarOff, Calculator, CalendarRange, Database, GraduationCap, LayoutDashboard, ListTodo, Lock, ScanLine, School, Settings, ShieldAlert, UsersRound, WandSparkles } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { shortDate } from '../domain/time'
-import { useActiveWeek, useStore } from '../store'
+import { useActiveWeek, useLiveWeeks, useStore } from '../store'
 import { ISSUE_META } from '../domain/issues'
 import { useWeekContext, useWeekIssues } from '../hooks'
 import { LeaveDialog, openLeaveDialog } from './LeaveDialog'
@@ -32,7 +32,7 @@ const NAV = [
 const ADMIN_NAV = [{ to: '/users', label: 'Tài khoản', icon: UsersRound, end: false }]
 
 export function Layout() {
-  const weeks = useStore((s) => s.weeks)
+  const weeks = useLiveWeeks()
   const setActiveWeek = useStore((s) => s.setActiveWeek)
   const anonymized = useStore((s) => s.anonymized)
   const isAdmin = useSync((s) => s.user?.role === 'admin')

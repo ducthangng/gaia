@@ -4,7 +4,7 @@ import { Badge, Button, Card, PageHeader, toast } from '../components/ui'
 import { addDays } from '../domain/time'
 import { detectMonday, parseCsv, parsePreferencesGrid, parseReferGrid, parseWeekGrid, sheetIdFromUrl } from '../domain/sheet-grid'
 import { fetchSheetTab } from '../services/sheets'
-import { useStore } from '../store'
+import { useLiveWeeks, useStore } from '../store'
 
 type Kind = 'week' | 'preferences' | 'refer'
 
@@ -16,6 +16,7 @@ const KINDS: Record<Kind, { label: string; tab: string; help: string }> = {
 
 export function DataPage() {
   const s = useStore()
+  const liveWeeks = useLiveWeeks()
   const [url, setUrl] = useState('')
   const [kind, setKind] = useState<Kind>('week')
   const [tab, setTab] = useState(KINDS.week.tab)
@@ -29,7 +30,7 @@ export function DataPage() {
     setGrid(g)
     setSource(from)
     setError(null)
-    if (kind === 'week') setMonday(detectMonday(g, Number(s.weeks.at(-1)!.startDate.slice(0, 4))) ?? addDays(s.weeks.at(-1)!.startDate, 7))
+    if (kind === 'week') setMonday(detectMonday(g, Number(liveWeeks.at(-1)!.startDate.slice(0, 4))) ?? addDays(liveWeeks.at(-1)!.startDate, 7))
   }
   const load = async () => {
     const id = sheetIdFromUrl(url)
@@ -44,7 +45,7 @@ export function DataPage() {
   const refer = grid && kind === 'refer' ? parseReferGrid(grid) : null
   const knownT = new Set(s.teachers.map((t) => t.id))
   const empty = (week && !week.lessons.length) || (prefs && !prefs.length) || (refer && !refer.length)
-  const overwrites = week && s.weeks.some((w) => w.id === monday)
+  const overwrites = week && liveWeeks.some((w) => w.id === monday)
 
   const apply = () => {
     if (week) {

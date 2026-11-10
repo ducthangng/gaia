@@ -7,7 +7,7 @@ import { parseSchedule, type OcrRow } from '../domain/ocr-parse'
 import { DAY_LABELS, dayLabel, weekDates } from '../domain/time'
 import type { Lesson } from '../domain/types'
 import { recognizeImage } from '../services/ocr'
-import { useActiveWeek, useStore } from '../store'
+import { useActiveWeek, useLiveWeeks, useStore } from '../store'
 
 const SUBJECTS = ['STEM', 'STEM-AI', 'STEM AI - ROBOTICS', 'CDS', 'AI', 'KNS']
 const LOW_CONFIDENCE = 70
@@ -22,7 +22,7 @@ const STATUS: Record<Status, { label: string; tone: 'green' | 'amber' | 'slate' 
 
 export function ImportPage() {
   const schools = useStore((s) => s.schools)
-  const weeks = useStore((s) => s.weeks)
+  const weeks = useLiveWeeks()
   const applyOcr = useStore((s) => s.applyOcr)
   const active = useActiveWeek()
   const planning = weeks.filter((w) => w.status === 'planning')

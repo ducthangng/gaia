@@ -12,7 +12,7 @@ import { shortDate } from '../domain/time'
 import type { Lesson } from '../domain/types'
 import { useWeekContext, useWeekIssues } from '../hooks'
 import { exportSchoolSchedule } from '../services/exports'
-import { useStore } from '../store'
+import { useLiveWeeks, useStore } from '../store'
 import { useSync } from '../sync/engine'
 
 /** Tab mở từ nút "Xem toàn trang" thì đóng được; trình duyệt chặn đóng (ví dụ mở bằng link dán vào) thì về trang Theo trường. */
@@ -33,7 +33,7 @@ export function SchedulePage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const ctx = useWeekContext()
-  const weeks = useStore((s) => s.weeks)
+  const weeks = useLiveWeeks()
   const setActiveWeek = useStore((s) => s.setActiveWeek)
   const issues = useWeekIssues(ctx)
   const load = useMemo(() => schoolLoad(ctx.week.lessons), [ctx.week.lessons])

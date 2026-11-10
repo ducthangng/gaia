@@ -7,7 +7,7 @@ import { affectedByLeave } from '../domain/leave'
 import { byTime } from '../domain/route'
 import { dayLabel, SESSION_LABEL } from '../domain/time'
 import { teacherLabel, type Lesson, type Session } from '../domain/types'
-import { useStore } from '../store'
+import { useLiveWeeks, useStore } from '../store'
 import { EntityAnchor, EntityText } from './EntityLink'
 import { Button } from './ui'
 
@@ -33,7 +33,7 @@ type Mode = 'session' | 'lesson'
 function Dialog({ request, close }: { request: Request; close: () => void }) {
   const teachers = useStore((s) => s.teachers)
   const schools = useStore((s) => s.schools)
-  const weeks = useStore((s) => s.weeks)
+  const weeks = useLiveWeeks()
   const activeWeekId = useStore((s) => s.activeWeekId)
   const addLeave = useStore((s) => s.addLeave)
   const addLessonLeave = useStore((s) => s.addLessonLeave)

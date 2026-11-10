@@ -1,10 +1,11 @@
+import { useMemo } from 'react'
 import { create } from 'zustand'
 import { places } from './data/load'
 import { rankCandidates } from './domain/recommend'
 import { buildContext, type World } from './domain/context'
 import { kmKey, routeForWeek } from './domain/route'
 import { addDays, weekDates } from './domain/time'
-import { DEFAULT_SETTINGS, needsTeacher, type Lesson, type Leave, type School, type Session, type Settings, type Teacher, type Week } from './domain/types'
+import { DEFAULT_SETTINGS, isLiveWeek, needsTeacher, type Lesson, type Leave, type School, type Session, type Settings, type Teacher, type Week } from './domain/types'
 import { cloneWeek } from './domain/weeks'
 import { applyDraft, applyBulk, newLesson, type BulkAction, type BulkScope, type LessonDraft } from './domain/lesson-edit'
 import { applyLeave, applyLessonLeave, revertLeave, revertLessonLeave } from './domain/leave'
@@ -51,6 +52,11 @@ interface State extends World {
   planNewWeek: (sourceId: string) => string
   archiveWeek: (id: string) => void
   reopenWeek: (id: string) => void
+  /** Xoá mềm: tuần bị ẩn, vẫn khôi phục được. Không xoá được tuần cuối cùng còn lại. */
+  deleteWeek: (id: string) => boolean
+  restoreWeek: (id: string) => void
+  /** Xoá hẳn một tuần đã xoá mềm (kèm toàn bộ ca của nó). */
+  purgeWeek: (id: string) => void
   applyOcr: (weekId: string, schoolId: string, rows: OcrRow[], removeIds: string[]) => { added: number; updated: number; removed: number }
   applySheetWeek: (monday: string, label: string, teachers: ParsedTeacher[], lessons: ParsedLesson[]) => { weekId: string; newTeachers: number; newSchools: number }
   applyPreferences: (rows: PreferenceRow[]) => number
@@ -77,9 +83,9 @@ const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/
 const OFFICE_OF = (v: string | null) => (v && /phú mỹ/i.test(v) ? 'PM' : 'BR')
 
 export const useStore = create<State>()((set, get) => {
-    /** Sửa lịch tuần đang lập; tuần đã lưu trữ thì không ghi gì cả. */
+    /** Sửa lịch tuần đang lập; tuần đã lưu trữ hoặc đã xoá thì không ghi gì cả. */
     const editWeek = (weekId: string, fn: (lessons: Lesson[]) => Lesson[]) =>
-      set((s) => ({ weeks: s.weeks.map((w) => (w.id === weekId && w.status === 'planning' ? { ...w, lessons: fn(w.lessons) } : w)) }))
+      set((s) => ({ weeks: s.weeks.map((w) => (w.id === weekId && isEditable(w) ? { ...w, lessons: fn(w.lessons) } : w)) }))
     const editLesson = (id: string, fn: (l: Lesson) => Lesson) => {
       const week = get().weeks.find((w) => w.lessons.some((l) => l.id === id))
       if (week) editWeek(week.id, (ls) => ls.map((l) => (l.id === id ? fn(l) : l)))
@@ -95,7 +101,7 @@ export const useStore = create<State>()((set, get) => {
     return {
       ...initial(),
       lastEdit: null,
-      setActiveWeek: (id) => set({ activeWeekId: id }),
+      setActiveWeek: (id) => set((s) => (s.weeks.some((w) => w.id === id && isLiveWeek(w)) ? { activeWeekId: id } : s)),
 
       saveLesson: (id, draft) => {
         const week = weekOf(id)
@@ -155,7 +161,7 @@ export const useStore = create<State>()((set, get) => {
           // Tuần đã lưu trữ giữ nguyên số đã chốt; tuần đang lập tính lại theo địa chỉ mới.
           set((s) => ({
             distances: dropHomeKm(s.distances, id),
-            weeks: s.weeks.map((w) => (w.status === 'planning' ? { ...w, legs: dropHomeLegs(w.legs, id) } : w)),
+            weeks: s.weeks.map((w) => (isEditable(w) ? { ...w, legs: dropHomeLegs(w.legs, id) } : w)),
           }))
         }
       },
@@ -228,7 +234,7 @@ export const useStore = create<State>()((set, get) => {
         let filled = 0
         let left = 0
         const week = get().weeks.find((w) => w.id === get().activeWeekId)
-        if (!week || week.status !== 'planning') return { filled, left }
+        if (!week || !isEditable(week)) return { filled, left }
         // Điền lần lượt, mỗi ca dựng lại ngữ cảnh để ca sau thấy phân công của ca trước.
         for (const l of week.lessons.filter((x) => x.status === 'needs_cover' || (!x.teacherId && x.status === 'assigned' && needsTeacher(x)))) {
           const current = get().weeks.find((w) => w.id === week.id)!
@@ -255,7 +261,7 @@ export const useStore = create<State>()((set, get) => {
         set((s) => ({ leaves: [...s.leaves, ...add] }))
         const range = { teacherId, from, to, sessions }
         let flagged = 0
-        for (const w of get().weeks.filter((x) => x.status === 'planning')) {
+        for (const w of get().weeks.filter(isEditable)) {
           editWeek(w.id, (ls) => {
             const next = applyLeave(ls, range)
             flagged += next.filter((l, i) => l !== ls[i]).length
@@ -266,12 +272,12 @@ export const useStore = create<State>()((set, get) => {
       },
 
       addLessonLeave: (teacherId, lessonIds, note) => {
-        const picked = get().weeks.filter((w) => w.status === 'planning').flatMap((w) => w.lessons).filter((l) => lessonIds.includes(l.id) && l.teacherId === teacherId && l.status === 'assigned')
+        const picked = get().weeks.filter(isEditable).flatMap((w) => w.lessons).filter((l) => lessonIds.includes(l.id) && l.teacherId === teacherId && l.status === 'assigned')
         const add: Leave[] = picked.map((l) => ({
           id: newId('lv-new-'), teacherId, date: l.date, session: l.session, kind: 'leave', note: note || 'Nghỉ phép', lessonId: l.id, start: l.start ?? undefined, end: l.end ?? undefined, label: l.className ?? l.note ?? undefined,
         }))
         set((s) => ({ leaves: [...s.leaves, ...add] }))
-        for (const w of get().weeks.filter((x) => x.status === 'planning')) editWeek(w.id, (ls) => applyLessonLeave(ls, teacherId, lessonIds))
+        for (const w of get().weeks.filter(isEditable)) editWeek(w.id, (ls) => applyLessonLeave(ls, teacherId, lessonIds))
         return picked.length
       },
 
@@ -280,11 +286,11 @@ export const useStore = create<State>()((set, get) => {
         if (!leave) return
         set((s) => ({ leaves: s.leaves.filter((l) => l.id !== id) }))
         if (leave.lessonId) {
-          for (const w of get().weeks.filter((x) => x.status === 'planning')) editWeek(w.id, (ls) => revertLessonLeave(ls, leave.teacherId, leave.lessonId!))
+          for (const w of get().weeks.filter(isEditable)) editWeek(w.id, (ls) => revertLessonLeave(ls, leave.teacherId, leave.lessonId!))
           return
         }
         const range = { teacherId: leave.teacherId, from: leave.date, to: leave.date, sessions: [leave.session] }
-        for (const w of get().weeks.filter((x) => x.status === 'planning')) editWeek(w.id, (ls) => revertLeave(ls, range))
+        for (const w of get().weeks.filter(isEditable)) editWeek(w.id, (ls) => revertLeave(ls, range))
       },
       updateTeacher: (id, patch) => set((s) => ({ teachers: s.teachers.map((t) => (t.id === id ? { ...t, ...patch } : t)) })),
       updateSchool: (id, patch) => set((s) => ({ schools: s.schools.map((x) => (x.id === id ? { ...x, ...patch } : x)) })),
@@ -310,13 +316,29 @@ export const useStore = create<State>()((set, get) => {
       planNewWeek: (sourceId) => {
         const { weeks, leaves } = get()
         const source = weeks.find((w) => w.id === sourceId)!
-        const lastStart = weeks.map((w) => w.startDate).sort().at(-1)!
+        const live = weeks.filter(isLiveWeek)
+        const lastStart = (live.length ? live : weeks).map((w) => w.startDate).sort().at(-1)!
         const week = cloneWeek(source, addDays(lastStart, 7), leaves, () => newId('n'))
-        set({ weeks: [...weeks, week], activeWeekId: week.id })
+        // Id tuần là ngày thứ Hai: tuần đã xoá trùng ngày bị thay hẳn bằng tuần mới.
+        set({ weeks: [...weeks.filter((w) => w.id !== week.id), week].sort((a, b) => a.startDate.localeCompare(b.startDate)), activeWeekId: week.id })
         return week.id
       },
       archiveWeek: (id) => set((s) => ({ weeks: s.weeks.map((w) => (w.id === id ? { ...w, status: 'archived', legs: frozenLegs(w, s) } : w)) })),
       reopenWeek: (id) => set((s) => ({ weeks: s.weeks.map((w) => (w.id === id ? { ...w, status: 'planning' } : w)) })),
+      deleteWeek: (id) => {
+        const { weeks, activeWeekId, lastEdit } = get()
+        const live = weeks.filter(isLiveWeek)
+        if (live.length <= 1 || !live.some((w) => w.id === id)) return false
+        const rest = live.filter((w) => w.id !== id)
+        set({
+          weeks: weeks.map((w) => (w.id === id ? { ...w, deletedAt: new Date().toISOString() } : w)),
+          activeWeekId: activeWeekId === id ? rest.at(-1)!.id : activeWeekId,
+          lastEdit: lastEdit?.weekId === id ? null : lastEdit,
+        })
+        return true
+      },
+      restoreWeek: (id) => set((s) => ({ weeks: s.weeks.map((w) => (w.id === id ? { ...w, deletedAt: undefined } : w)) })),
+      purgeWeek: (id) => set((s) => ({ weeks: s.weeks.filter((w) => w.id !== id || isLiveWeek(w)) })),
 
       applyOcr: (weekId, schoolId, rows, removeIds) => {
         const week = get().weeks.find((w) => w.id === weekId)!
@@ -416,6 +438,9 @@ export const useStore = create<State>()((set, get) => {
     }
 })
 
+/** Tuần còn sửa được: đang lập và chưa bị xoá. */
+const isEditable = (w: Week) => w.status === 'planning' && isLiveWeek(w)
+
 const sessionOf = (start: string | null): Session => (start && start >= '12:00' ? 'PM' : 'AM')
 
 const findExisting = (lessons: Lesson[], schoolId: string, date: string, r: OcrRow) =>
@@ -440,4 +465,10 @@ export const useWorld = (): World => {
   return s
 }
 
-export const useActiveWeek = () => useStore((s) => s.weeks.find((w) => w.id === s.activeWeekId) ?? s.weeks.at(-1)!)
+export const useActiveWeek = () => useStore((s) => s.weeks.find((w) => w.id === s.activeWeekId && isLiveWeek(w)) ?? s.weeks.findLast(isLiveWeek) ?? s.weeks.at(-1)!)
+
+/** Các tuần chưa bị xoá, theo thứ tự ngày. */
+export const useLiveWeeks = () => {
+  const weeks = useStore((s) => s.weeks)
+  return useMemo(() => weeks.filter(isLiveWeek), [weeks])
+}

@@ -15,6 +15,7 @@ import { TeachersPage } from './pages/Teachers'
 import { UsersPage } from './pages/Users'
 import { TodosPage } from './pages/Todos'
 import { WeeksPage } from './pages/Weeks'
+import { WeekComparePage } from './pages/WeekCompare'
 
 export function App() {
   return (
@@ -31,6 +32,7 @@ export function App() {
             <Route path="teachers/:id?" element={<TeachersPage />} />
             <Route path="costs" element={<CostsPage />} />
             <Route path="weeks" element={<WeeksPage />} />
+            <Route path="weeks/compare" element={<WeekComparePage />} />
             <Route path="import" element={<ImportPage />} />
             <Route path="data" element={<DataPage />} />
             <Route path="settings" element={<SettingsPage />} />

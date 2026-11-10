@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { toast } from '../components/ui'
+import { isLiveWeek } from '../domain/types'
 import { useStore } from '../store'
 import { api, ApiError, type ApiUser, type Entity } from './api'
 import { applyEntities, diffIndex, emptyState, entityKey, indexState, recordSynced, type EntityIndex, type SyncedState } from './entities'
@@ -35,7 +36,8 @@ export async function hydrate(user: ApiUser) {
   const snap = await api<{ rev: number; entities: Entity[] }>('/state')
   const state = applyEntities(emptyState(), snap.entities)
   const wanted = useStore.getState().activeWeekId
-  const activeWeekId = state.weeks.some((w) => w.id === wanted) ? wanted : state.weeks.at(-1)?.id ?? ''
+  const live = state.weeks.filter(isLiveWeek)
+  const activeWeekId = live.some((w) => w.id === wanted) ? wanted : (live.at(-1) ?? state.weeks.at(-1))?.id ?? ''
   useStore.setState({ ...state, activeWeekId, lastEdit: null })
   base = indexState(state)
   rev = snap.rev
@@ -136,7 +138,8 @@ function apply(entities: Entity[], keep: Set<string>) {
   for (const k of Object.keys(next) as (keyof SyncedState)[]) if (next[k] !== s[k]) (patch as Record<string, unknown>)[k] = next[k]
   recordSynced(base, entities)
   if (Object.keys(patch).length) {
-    if (patch.weeks && !patch.weeks.some((w) => w.id === s.activeWeekId) && patch.weeks.length) (patch as Record<string, unknown>).activeWeekId = patch.weeks.at(-1)!.id
+    const live = patch.weeks?.filter(isLiveWeek) ?? []
+    if (live.length && !live.some((w) => w.id === s.activeWeekId)) (patch as Record<string, unknown>).activeWeekId = live.at(-1)!.id
     useStore.setState(patch)
   }
 }

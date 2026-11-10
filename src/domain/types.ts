@@ -58,7 +58,12 @@ export interface Week {
   /** Cột CTP của workbook chỉ cộng từ ngày này (tuần vắt qua hai tháng). */
   reportedFrom?: string
   reported?: Record<string, { kns: number; stem: number; cds: number; cost: number }>
+  /** Đã xoá (ISO time): ẩn khỏi mọi màn hình nhưng vẫn giữ nguyên để khôi phục. */
+  deletedAt?: string
 }
+
+/** Tuần chưa bị xoá. */
+export const isLiveWeek = (w: Pick<Week, 'deletedAt'>) => !w.deletedAt
 
 export type Preference =
   | { id: string; type: 'finishBy'; time: string; days?: number[]; note?: string }
